@@ -1,6 +1,6 @@
 {
-  "summary": "Rencana perbaikan tampilan bilah kontrol dan sorting matriks kelas 23 rombel: merestrukturisasi menjadi 2 baris teratur anti tumpang-tindih dan menambahkan fitur pengurutan (prioritas belum absen, urutan rombel, dan A-Z).",
-  "updatedAt": "2026-10-15T09:30:13.551394493Z",
+  "summary": "Rencana perbaikan error deploy Vercel terkait konflik peer dependency esbuild antara Vite 8 dan devDependencies, konfigurasi .npmrc untuk resolusi dependensi Vercel, serta penambahan vercel.json untuk routing Vite SPA.",
+  "updatedAt": "2026-10-15T09:51:53.491956893Z",
   "requestFeedback": true,
   "userFacing": true
 }

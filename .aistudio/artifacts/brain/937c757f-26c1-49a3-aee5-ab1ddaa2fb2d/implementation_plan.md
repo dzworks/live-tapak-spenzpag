@@ -1,31 +1,70 @@
-# Rencana Perbaikan Tampilan & Penambahan Fitur Sorting Matriks Kelas
+# Perbaikan Konflik Dependensi Deploy Vercel (esbuild & Vite 8)
 
-## Masalah yang Diidentifikasi
-- Kontrol penyaringan dan pencarian pada matriks kelas saat ini berada dalam satu kontainer horizontal yang mengalami `flex-wrap` dan tumpang tindih pada layar laptop/tablet/split-view.
-- Belum tersedia fitur pengurutan (sorting) dinamis untuk memprioritaskan kelas dengan status "Belum Absen" pada jam aktif saat ini agar guru piket dapat memantau dengan cepat.
+Solusi terarah untuk mengatasi kegagalan `npm install` (Conflicting peer dependency: esbuild) pada log build Vercel, memastikan proses build dan deployment berjalan sukses.
+
+## 1. Ringkasan Akar Masalah (Root Cause)
+
+Berdasarkan log Vercel:
+```text
+npm error Conflicting peer dependency: esbuild@0.28.2
+npm error node_modules/tsx/node_modules/esbuild
+npm error   peerOptional esbuild@"^0.27.0 || ^0.28.0" from vite@8.3.4
+npm error Fix the upstream dependency conflict, or retry this command with --force or --legacy-peer-deps
+```
+
+* **Penyebab Utama**: Pada file `package.json`, tercatat `"esbuild": "^0.25.0"` di bagian `devDependencies`. Sementara itu, `vite@8.3.x` dan `tsx@4.21.x` membutuhkan versi `esbuild` `^0.27.0 || ^0.28.0`.
+* Ketika Vercel menjalankan `npm install` secara default dengan npm 7+, algoritma `ERESOLVE` mendeteksi ketidakcocokan antara versi root `esbuild@0.25.0` dengan kebutuhan `vite`, sehingga menghentikan instalasi dengan status exit code 1.
 
 ---
 
-## Solusi yang Diusulkan
+## 2. Rencana Tindakan Perbaikan
 
-### 1. Restrukturisasi Bilah Kontrol Menjadi 2 Baris Terorganisir
-- **Baris 1: Filter Tingkat & Status Hari**
-  - Segmented control tingkat rombel: `Semua (23 Rombel)`, `Kelas VII (8)`, `Kelas VIII (8)`, `Kelas IX (7)`.
-  - Chip penanda jadwal aktif / hari master di sisi kanan dengan tata letak flex yang tidak bertumpuk.
-- **Baris 2: Filter Status, Fitur Sorting, Pencarian & Kerapatan Layar**
-  - Input pencarian nama kelas / ruangan dengan ikon dan tombol reset.
-  - Filter cepat status: `Semua`, `Hadir`, `Belum`, `Infal` dengan badge hitungan kelas yang sesuai.
-  - **Menu Pengurutan (Sorting)** baru:
-    - *Urutan Standar (VII → IX)*
-    - *Belum Absen Teratas (Prioritas Pantau Piket)*
-    - *Nama Kelas A-Z*
-    - *Lokasi Ruangan*
-  - Tombol beralih kerapatan tampilan (*Layar Ringkas 23 Kelas / Normal*).
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      Langkah Perbaikan                      │
+├─────────────────────────────────────────────────────────────┤
+│ 1. package.json  ──> Hapus devDependency "esbuild": "^0.25" │
+│                      (Biarkan Vite & tsx mengelola versi)   │
+│                                                             │
+│ 2. .npmrc        ──> Buat konfigurasi legacy-peer-deps=true │
+│                      (Mencegah penolakan peer dep di Vercel)│
+│                                                             │
+│ 3. vercel.json   ──> Konfigurasi Vite SPA routing rewrite   │
+│                      (Semua route diarahkan ke index.html)  │
+│                                                             │
+│ 4. Build Test    ──> Uji compile_applet & tsc --noEmit      │
+└─────────────────────────────────────────────────────────────┘
+```
 
-### 2. Implementasi Logika Sorting Dinamis
-- Menghitung status kelas pada jam aktif saat ini (apakah sedang ada jadwal dan gurunya belum absen).
-- Menyediakan sorting prioritas: jika memilih *Belum Absen Teratas*, kelas yang sedang berlangsung tanpa absensi akan langsung muncul di jajaran baris paling atas matriks.
+### Langkah 1: Pembersihan `package.json`
+- Menghapus `"esbuild": "^0.25.0"` dari blok `devDependencies`. Vite dan TSX sudah menyertakan esbuild yang kompatibel secara otomatis di pohon dependensi mereka, sehingga tidak ada lagi versi esbuild kadaluarsa yang dipaksakan di root project.
 
-### 3. Responsivitas dan Penataan Ruang
-- Memastikan wrapping antar elemen pada mobile maupun tablet tertata rapi tanpa elemen yang terpotong atau saling menimpa.
-- Menguji kompilasi kode dan memverifikasi tampilan.
+### Langkah 2: Pembuatan File `.npmrc`
+- Menambahkan file `.npmrc` di root direktori dengan isi:
+  ```ini
+  legacy-peer-deps=true
+  ```
+  Ini adalah praktik standar terbaik untuk project React 19 + Tailwind 4 + Vite di platform cloud seperti Vercel. Konfigurasi ini menjamin `npm install` pada server Vercel tidak terhenti oleh konflik rentang versi peer dependency minor.
+
+### Langkah 3: Penambahan Konfigurasi `vercel.json`
+- Menyediakan file `vercel.json` dengan konfigurasi framework Vite:
+  ```json
+  {
+    "rewrites": [
+      {
+        "source": "/(.*)",
+        "destination": "/index.html"
+      }
+    ]
+  }
+  ```
+  Menjamin aplikasi SPA (Single Page Application) dapat di-refresh di halaman mana pun tanpa mengalami error 404 di Vercel.
+
+### Langkah 4: Verifikasi & Uji Kompilasi
+- Menjalankan `compile_applet` dan `lint_applet` untuk memastikan build lokal `vite build` dan pemeriksaan tipe TypeScript `tsc --noEmit` lulus 100%.
+
+---
+
+## 3. Langkah yang Dilakukan Pengguna Setelah Perbaikan Selesai
+1. Commit perubahan baru (`git add .`, `git commit -m "fix: resolve esbuild peer dependency for vercel deployment"`, `git push origin main`).
+2. Vercel akan otomatis mendeteksi commit baru di GitHub dan menjalankan deployment ulang tanpa error dependensi.
