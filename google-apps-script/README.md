@@ -94,3 +94,7 @@ Skrip akan membaca seluruh 6 sheet berikut dalam 1 panggilan API JSON (All-in-On
 5. Klik **Uji Koneksi (Test Ping 6 Sheet)** untuk memastikan data 6 sheet terbaca dengan benar.
 6. Klik **Simpan Permanen ke Server**.
 7. URL kini tersimpan permanen di server frontend dan seluruh device/layar Smart TV akan otomatis langsung menarik data dari Google Spreadsheet Anda!
+
+3. Langkah yang Dilakukan Pengguna Setelah Perbaikan Selesai
+Commit perubahan baru (git add ., git commit -m "fix: resolve esbuild peer dependency for vercel deployment", git push origin main).
+Vercel akan otomatis mendeteksi commit baru di GitHub dan menjalankan deployment ulang tanpa error dependensi.
