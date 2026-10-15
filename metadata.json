@@ -1,0 +1,6 @@
+{
+  "name": "GuruLive - Monitoring Mengajar Kelas",
+  "description": "Aplikasi Live Monitoring Presensi Guru Mengajar di Kelas berbasis Google Apps Script dan Google Spreadsheet secara real-time.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
