@@ -45,6 +45,7 @@ import { AttendanceFeed } from './components/AttendanceFeed';
 import { DetailModal } from './components/DetailModal';
 import { AdminUrlModal } from './components/AdminUrlModal';
 import { InitialSetupModal } from './components/InitialSetupModal';
+import { AttendanceToastContainer, AttendanceAlertToast } from './components/AttendanceToastContainer';
 import { 
   Calendar, 
   Info,
@@ -148,6 +149,12 @@ export default function App() {
   const [isLiveConnected, setIsLiveConnected] = useState<boolean>(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
+  // Sistem Alert Visual (Toast) & Indikator Perubahan Real-time Presensi
+  const [activeToasts, setActiveToasts] = useState<AttendanceAlertToast[]>([]);
+  const [recentlyUpdatedClasses, setRecentlyUpdatedClasses] = useState<string[]>([]);
+  const prevLogsMapRef = React.useRef<Map<string, string>>(new Map());
+  const isInitialSyncDoneRef = React.useRef<boolean>(false);
+
   // Persist ke localStorage saat data berubah
   useEffect(() => {
     localStorage.setItem('gurulive_tapak_guru_v2', JSON.stringify(masterGuru));
@@ -229,6 +236,63 @@ export default function App() {
         if (bundle.masterRuangan.length > 0) setMasterRuangan(bundle.masterRuangan);
         if (bundle.schedules.length > 0) setSchedules(bundle.schedules);
         if (bundle.attendanceLogs.length > 0) {
+          // Deteksi alert presensi baru secara real-time jika bukan sinkronisasi awal
+          if (isInitialSyncDoneRef.current) {
+            const newAlerts: AttendanceAlertToast[] = [];
+            const updatedClassNames: string[] = [];
+
+            bundle.attendanceLogs.forEach(log => {
+              const logKey = `${canonicalDateKey(log.tanggal)}_${normalizeClassName(log.kelas)}_${(log.kodeGuru || '').toLowerCase()}_${log.mapelKe || 1}`;
+              const currentHash = `${log.statusKehadiran}_${log.waktuAbsen}_${log.pengganti}_${log.ruangBelajar}`;
+              const prevHash = prevLogsMapRef.current.get(logKey);
+
+              // Jika belum pernah ada di sync sebelumnya (presensi baru masuk!) ATAU status berubah
+              if (prevHash !== undefined && prevHash !== currentHash) {
+                const teacher = (bundle.masterGuru.length > 0 ? bundle.masterGuru : masterGuru)
+                  .find(g => g.kodeGuru.toLowerCase() === (log.kodeGuru || '').toLowerCase());
+                const subject = (bundle.masterMapel.length > 0 ? bundle.masterMapel : masterMapel)
+                  .find(m => m.kodeMapel.toLowerCase() === (log.mataPelajaran || '').toLowerCase());
+
+                newAlerts.push({
+                  id: `${logKey}_${Date.now()}_${Math.random()}`,
+                  className: log.kelas,
+                  teacherName: teacher?.namaLengkap || log.namaGuru || `Guru [${log.kodeGuru}]`,
+                  teacherCode: log.kodeGuru,
+                  subjectName: log.mataPelajaran || subject?.namaMapel,
+                  waktuAbsen: log.waktuAbsen || 'Tercatat',
+                  statusKehadiran: log.statusKehadiran || 'Hadir',
+                  pengganti: log.pengganti,
+                  namaPengganti: log.namaPengganti,
+                  timestamp: Date.now(),
+                });
+
+                if (log.kelas && !updatedClassNames.includes(log.kelas)) {
+                  updatedClassNames.push(log.kelas);
+                }
+              }
+            });
+
+            if (newAlerts.length > 0) {
+              setActiveToasts(prev => [...newAlerts.slice(-3), ...prev].slice(0, 5));
+              setRecentlyUpdatedClasses(updatedClassNames);
+
+              // Hilangkan efek glowing border pada matriks kelas setelah 8 detik
+              setTimeout(() => {
+                setRecentlyUpdatedClasses([]);
+              }, 8000);
+            }
+          }
+
+          // Perbarui map hash untuk perbandingan siklus berikutnya
+          const nextMap = new Map<string, string>();
+          bundle.attendanceLogs.forEach(log => {
+            const logKey = `${canonicalDateKey(log.tanggal)}_${normalizeClassName(log.kelas)}_${(log.kodeGuru || '').toLowerCase()}_${log.mapelKe || 1}`;
+            const currentHash = `${log.statusKehadiran}_${log.waktuAbsen}_${log.pengganti}_${log.ruangBelajar}`;
+            nextMap.set(logKey, currentHash);
+          });
+          prevLogsMapRef.current = nextMap;
+          isInitialSyncDoneRef.current = true;
+
           setAttendanceLogs(bundle.attendanceLogs);
           // Prioritaskan tanggal hari ini (WIB) atau tanggal terbaru dari attendance logs
           const todayWIB = getTodayWIBDisplayDate();
@@ -254,12 +318,32 @@ export default function App() {
     } finally {
       setIsSyncing(false);
     }
-  }, []);
+  }, [masterGuru, masterMapel]);
 
-  // Load initial backend URL dari konfigurasi permanen server (/api/config)
+  // Load initial backend URL dari konfigurasi permanen GitHub/Vercel (/app-config.json) atau server (/api/config)
   useEffect(() => {
     let isMounted = true;
     const loadServerConfig = async () => {
+      // 1. Coba baca file konfigurasi publik statis (/app-config.json) yang terdeploy dari repo GitHub ke Vercel
+      try {
+        const staticRes = await fetch('/app-config.json');
+        const staticContentType = staticRes.headers.get('content-type') || '';
+        if (staticRes.ok && staticContentType.includes('application/json')) {
+          const staticData = await staticRes.json();
+          if (isMounted && staticData && staticData.appsScriptUrl && staticData.appsScriptUrl.trim()) {
+            const url = staticData.appsScriptUrl.trim();
+            setAppsScriptUrl(url);
+            localStorage.setItem('gurulive_apps_script_url', url);
+            setIsInitialSetupOpen(false); // Link terekam dari GitHub, langsung buka dashboard tanpa popup
+            fetchFromAppsScript(url);
+            return;
+          }
+        }
+      } catch {
+        // Abaikan jika app-config.json belum diset di repo
+      }
+
+      // 2. Coba baca dari backend Node /api/config (jika berjalan dengan server Express)
       try {
         const res = await fetch('/api/config');
         const contentType = res.headers.get('content-type') || '';
@@ -268,14 +352,18 @@ export default function App() {
           if (isMounted && data.success && data.scriptUrl) {
             setAppsScriptUrl(data.scriptUrl);
             localStorage.setItem('gurulive_apps_script_url', data.scriptUrl);
+            setIsInitialSetupOpen(false);
             fetchFromAppsScript(data.scriptUrl);
             return;
           }
         }
       } catch {
-        // Mode offline/dev tanpa API server (atau deployment statis Vercel)
+        // Mode offline/dev tanpa API server
       }
+
+      // 3. Fallback jika URL sudah ada di browser localStorage atau CONFIG.APPS_SCRIPT_URL
       if (isMounted && appsScriptUrl) {
+        setIsInitialSetupOpen(false);
         fetchFromAppsScript(appsScriptUrl);
       }
     };
@@ -546,6 +634,7 @@ export default function App() {
             onSelectSlot={slot => setSelectedSlot(slot)}
             onSelectDateFallback={setSelectedDate}
             highlightedClassName={highlightedClassName}
+            recentlyUpdatedClasses={recentlyUpdatedClasses}
           />
         )}
 
@@ -633,6 +722,13 @@ export default function App() {
         onClose={() => setIsAdminModalOpen(false)}
         currentUrl={appsScriptUrl}
         onUrlUpdated={handleUrlUpdated}
+      />
+
+      {/* 8. Sistem Alert Visual (Toast) Presensi Masuk Real-Time */}
+      <AttendanceToastContainer
+        toasts={activeToasts}
+        onDismiss={id => setActiveToasts(prev => prev.filter(t => t.id !== id))}
+        onSelectClass={handleSelectUnconfirmedClass}
       />
     </div>
   );

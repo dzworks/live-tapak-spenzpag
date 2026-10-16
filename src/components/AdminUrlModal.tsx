@@ -13,7 +13,11 @@ import {
   ShieldAlert,
   X,
   FileCode2,
-  Sparkles
+  Sparkles,
+  Copy,
+  Check,
+  Download,
+  Globe
 } from 'lucide-react';
 import { maskAppsScriptUrl, getMaskVerificationSnippet } from '../utils/maskUrl';
 
@@ -49,6 +53,42 @@ export const AdminUrlModal: React.FC<AdminUrlModalProps> = ({
   const [showChangePin, setShowChangePin] = useState(false);
   const [newPin, setNewPin] = useState('');
   const [pinChangeMessage, setPinChangeMessage] = useState('');
+
+  // Ekspor konfigurasi permanen untuk GitHub / Vercel (Multi-Device)
+  const [copiedConfig, setCopiedConfig] = useState(false);
+  const activeUrlForExport = inputUrl.trim() || currentUrl.trim();
+
+  const handleCopyConfig = () => {
+    const jsonStr = JSON.stringify({
+      appsScriptUrl: activeUrlForExport,
+      adminPin: "1234",
+      updatedAt: new Date().toISOString(),
+      description: "File konfigurasi statis GuruLive Monitor untuk deployment GitHub & Vercel."
+    }, null, 2);
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(jsonStr);
+    }
+    setCopiedConfig(true);
+    setTimeout(() => setCopiedConfig(false), 2500);
+  };
+
+  const handleDownloadConfig = () => {
+    const jsonStr = JSON.stringify({
+      appsScriptUrl: activeUrlForExport,
+      adminPin: "1234",
+      updatedAt: new Date().toISOString(),
+      description: "File konfigurasi statis GuruLive Monitor untuk deployment GitHub & Vercel."
+    }, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'app-config.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   if (!isOpen) return null;
 
@@ -457,6 +497,72 @@ export const AdminUrlModal: React.FC<AdminUrlModalProps> = ({
                     <span>{saveSuccessMessage}</span>
                   </div>
                 )}
+              </div>
+
+              {/* Card Multi-Perangkat: Cara Membuat Permanen untuk Semua Perangkat (GitHub & Vercel) */}
+              <div className="p-4 rounded-xl bg-indigo-50/70 border border-indigo-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
+                    <Globe className="w-4 h-4 text-indigo-600" />
+                    Jadikan Permanen untuk Semua Perangkat (GitHub & Vercel)
+                  </span>
+                  <span className="text-[10px] bg-indigo-200 text-indigo-800 font-bold px-2 py-0.5 rounded-full">
+                    Multi-Device
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-indigo-900 leading-relaxed">
+                  Agar ketika web dibuka di perangkat lain (HP guru, PC piket, TV monitor) tidak perlu menginput URL lagi, pilih salah satu metode permanen berikut:
+                </p>
+
+                {/* Tab Opsi 1 & 2 */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                  {/* Opsi 1: Vercel Env */}
+                  <div className="p-3 rounded-lg bg-white border border-indigo-200/80 space-y-1.5 shadow-2xs">
+                    <span className="font-bold text-slate-800 text-[11px] flex items-center gap-1">
+                      <span className="w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-mono">1</span>
+                      Vercel Env (Paling Cepat)
+                    </span>
+                    <p className="text-[11px] text-slate-600 leading-tight">
+                      Di Vercel &gt; Settings &gt; Environment Variables:
+                    </p>
+                    <div className="bg-slate-100 p-1.5 rounded font-mono text-[10px] text-indigo-700 font-bold">
+                      VITE_APPS_SCRIPT_URL
+                    </div>
+                    <p className="text-[10px] text-slate-500">
+                      Masukkan URL Apps Script Anda lalu klik Redeploy. Otomatis aktif untuk seluruh perangkat!
+                    </p>
+                  </div>
+
+                  {/* Opsi 2: public/app-config.json di GitHub */}
+                  <div className="p-3 rounded-lg bg-white border border-indigo-200/80 space-y-1.5 shadow-2xs">
+                    <span className="font-bold text-slate-800 text-[11px] flex items-center gap-1">
+                      <span className="w-4 h-4 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-mono">2</span>
+                      Commit ke GitHub Repo
+                    </span>
+                    <p className="text-[11px] text-slate-600 leading-tight">
+                      Simpan ke file <code className="font-mono text-indigo-700">public/app-config.json</code>:
+                    </p>
+                    <div className="flex items-center gap-1.5 pt-0.5">
+                      <button
+                        type="button"
+                        onClick={handleCopyConfig}
+                        className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold rounded border border-slate-300 flex items-center gap-1 cursor-pointer transition"
+                      >
+                        {copiedConfig ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-slate-600" />}
+                        <span>{copiedConfig ? 'Tersalin!' : 'Salin JSON'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDownloadConfig}
+                        className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-semibold rounded border border-indigo-200 flex items-center gap-1 cursor-pointer transition"
+                      >
+                        <Download className="w-3 h-3 text-indigo-600" />
+                        <span>Unduh File</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Card 3: Ganti PIN Pengawas (Opsional) */}

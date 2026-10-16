@@ -12,7 +12,8 @@ import {
   ChevronUp,
   FileCode2,
   Copy,
-  Check
+  Check,
+  Globe
 } from 'lucide-react';
 
 interface InitialSetupModalProps {
@@ -237,6 +238,16 @@ export const InitialSetupModal: React.FC<InitialSetupModalProps> = ({
                 </div>
               </div>
             )}
+
+            {/* Multi-Device Tip */}
+            <div className="flex items-center justify-between text-[11px] text-slate-600 bg-indigo-50/70 p-2.5 rounded-xl border border-indigo-100">
+              <span className="flex items-center gap-1.5 leading-relaxed">
+                <Globe className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                <span>
+                  <strong>Tip Multi-Device:</strong> Simpan URL di sini untuk browser ini. Untuk membuat link otomatis aktif di seluruh device (HP, tablet piket, monitor TV) tanpa perlu input ulang, tambahkan <code className="font-mono text-indigo-700 bg-indigo-100/60 px-1 py-0.5 rounded">VITE_APPS_SCRIPT_URL</code> di Vercel atau commit ke file <code className="font-mono text-indigo-700 bg-indigo-100/60 px-1 py-0.5 rounded">public/app-config.json</code> di GitHub.
+                </span>
+              </span>
+            </div>
           </div>
 
           {/* Action Buttons: Uji Koneksi & Simpan */}

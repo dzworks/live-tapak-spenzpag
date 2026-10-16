@@ -3,8 +3,8 @@
  */
 
 export const CONFIG = {
-  // URL Web App Google Apps Script (Diatur via file .env atau langsung di sini)
-  APPS_SCRIPT_URL: import.meta.env.VITE_APPS_SCRIPT_URL || '',
+  // URL Web App Google Apps Script bawaan proyek (terhubung langsung ke spreadsheet backend)
+  APPS_SCRIPT_URL: import.meta.env.VITE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwXprXHiRJjCCUi743dMmgqYjfYjaJjcJnh1MfudAYq6bCaCLGwKheu-IMS8i6wXZxY/exec',
   
   // Interval otomatis sinkronisasi ke spreadsheet dalam detik (default: 60 detik)
   AUTO_REFRESH_INTERVAL: 60,

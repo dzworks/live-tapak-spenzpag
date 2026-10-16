@@ -20,6 +20,7 @@ import {
   normalizeClassName,
   isSameDate
 } from '../utils/appsScriptCode';
+import { calculateSlotTimeMarker } from '../utils/timeMarker';
 import { 
   Search,
   Maximize2,
@@ -31,7 +32,8 @@ import {
   CheckCircle2,
   UserCheck,
   ArrowUpDown,
-  X
+  X,
+  BellRing
 } from 'lucide-react';
 
 interface ClassroomMatrixProps {
@@ -48,6 +50,7 @@ interface ClassroomMatrixProps {
   onToggleDensity?: () => void;
   onSelectDateFallback?: (date: string) => void;
   highlightedClassName?: string | null;
+  recentlyUpdatedClasses?: string[];
 }
 
 export type SortOption = 'default' | 'unattended-first' | 'name-asc' | 'room';
@@ -66,6 +69,7 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
   onToggleDensity,
   onSelectDateFallback,
   highlightedClassName,
+  recentlyUpdatedClasses,
 }) => {
   const [selectedGrade, setSelectedGrade] = useState<'all' | 'VII' | 'VIII' | 'IX'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'hadir' | 'belum' | 'infal'>('all');
@@ -714,6 +718,11 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                       colorStyle = 'bg-slate-50/70 border-slate-200 text-slate-700 hover:bg-slate-100';
                     }
 
+                    // Hitung rentang waktu slot dan posisi penanda waktu absen (timestamp marker)
+                    const slotStartTime = schedule.jamMulai || currentSchedules.find(p => p.period === schedule.startPeriod)?.startTime || '07:00';
+                    const slotEndTime = schedule.jamSelesai || currentSchedules.find(p => p.period === schedule.endPeriod)?.endTime || '08:20';
+                    const timeMarker = calculateSlotTimeMarker(slotStartTime, slotEndTime, slot.attendance?.waktuAbsen);
+
                     cells.push(
                       <td
                         key={`slot-${cls.idKelas}-${period}`}
@@ -725,59 +734,91 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                       >
                         <div
                           onClick={() => onSelectSlot(slot)}
-                          title={`${slot.subject?.namaMapel || schedule.kodeMapel}\nGuru: ${slot.teacher?.namaLengkap || schedule.kodeGuru}\nRuang: ${slot.activeRoom}\nStatus: ${slot.statusLabel}`}
-                          className={`rounded cursor-pointer transition-all border text-left flex items-center justify-between ${
+                          title={`${slot.subject?.namaMapel || schedule.kodeMapel}\nGuru: ${slot.teacher?.namaLengkap || schedule.kodeGuru}\nRuang: ${slot.activeRoom}\nStatus: ${slot.statusLabel}${timeMarker ? `\nWaktu Absen: ${timeMarker.formattedDisplay} (Jadwal: ${timeMarker.startTime} - ${timeMarker.endTime})` : ''}`}
+                          className={`rounded cursor-pointer transition-all border text-left flex ${
                             isUltraCompact 
-                              ? 'px-1.5 py-0.5 min-h-[28px] leading-tight' 
-                              : 'p-2 min-h-[68px] flex-col justify-between'
+                              ? 'px-1.5 py-0.5 min-h-[30px] leading-tight flex-col justify-between' 
+                              : 'p-2 min-h-[72px] flex-col justify-between'
                           } ${colorStyle}`}
                         >
                           {isUltraCompact ? (
-                            /* TAMPILAN 23 LAYAR (ULTRA-RINGKAS): Kode Guru, Kode Mapel, dan Nama Ruangan */
-                            <>
-                              <div className="flex items-center gap-1 min-w-0">
-                                <span className="font-mono font-bold text-[9px] bg-black/5 px-1 py-0.2 rounded shrink-0">
-                                  {schedule.kodeGuru}
-                                </span>
-                                <span className="font-semibold text-[10px] font-mono truncate" title={slot.subject?.namaMapel || schedule.kodeMapel}>
-                                  {schedule.kodeMapel}
-                                </span>
+                            /* TAMPILAN 23 LAYAR (ULTRA-RINGKAS): Kode Guru, Kode Mapel, Waktu Absen, dan Mini Timeline */
+                            <div className="w-full flex flex-col justify-between h-full">
+                              <div className="flex items-center justify-between gap-1 w-full">
+                                <div className="flex items-center gap-1 min-w-0">
+                                  <span className="font-mono font-bold text-[9px] bg-black/5 px-1 py-0.2 rounded shrink-0">
+                                    {schedule.kodeGuru}
+                                  </span>
+                                  <span className="font-semibold text-[10px] font-mono truncate" title={slot.subject?.namaMapel || schedule.kodeMapel}>
+                                    {schedule.kodeMapel}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-1 shrink-0 ml-1">
+                                  {timeMarker && (
+                                    <span 
+                                      className="text-[9px] font-mono font-bold text-emerald-800 bg-emerald-100/90 px-1 py-0.2 rounded border border-emerald-300/80 flex items-center gap-0.5 shrink-0" 
+                                      title={`Waktu Absen: ${timeMarker.formattedDisplay} (Jadwal: ${timeMarker.startTime} - ${timeMarker.endTime})`}
+                                    >
+                                      🕒 {timeMarker.absenTime}
+                                    </span>
+                                  )}
+                                  <span className="text-[9px] font-mono opacity-80 truncate max-w-[50px]" title={slot.activeRoom}>
+                                    {slot.activeRoom}
+                                  </span>
+                                  {slot.statusColor === 'green' && (
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0" title="Hadir"></span>
+                                  )}
+                                  {slot.statusColor === 'red' && (
+                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse shrink-0" title="Belum Terisi"></span>
+                                  )}
+                                  {slot.statusColor === 'purple' && (
+                                    <span className="text-[8px] font-bold text-purple-700 bg-purple-100 px-0.5 rounded shrink-0">
+                                      Infal
+                                    </span>
+                                  )}
+                                  {slot.statusColor === 'yellow' && (
+                                    <span className="text-[8px] font-bold text-amber-700 bg-amber-100 px-0.5 rounded shrink-0">
+                                      Izin
+                                    </span>
+                                  )}
+                                </div>
                               </div>
 
-                              <div className="flex items-center gap-0.5 shrink-0 ml-1">
-                                <span className="text-[9px] font-mono opacity-80 truncate max-w-[58px]" title={slot.activeRoom}>
-                                  {slot.activeRoom}
-                                </span>
-                                {slot.statusColor === 'green' && (
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0" title="Hadir"></span>
-                                )}
-                                {slot.statusColor === 'red' && (
-                                  <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse shrink-0" title="Belum Terisi"></span>
-                                )}
-                                {slot.statusColor === 'purple' && (
-                                  <span className="text-[8px] font-bold text-purple-700 bg-purple-100 px-0.5 rounded shrink-0">
-                                    Infal
-                                  </span>
-                                )}
-                                {slot.statusColor === 'yellow' && (
-                                  <span className="text-[8px] font-bold text-amber-700 bg-amber-100 px-0.5 rounded shrink-0">
-                                    Izin
-                                  </span>
-                                )}
-                              </div>
-                            </>
+                              {/* Garis Waktu Presensi KBM (Mini Timeline & Pin Waktu Absen) */}
+                              {timeMarker && (
+                                <div 
+                                  className="w-full mt-1 pt-0.5 border-t border-black/5 relative"
+                                  title={`Garis Waktu KBM: ${timeMarker.startTime} s/d ${timeMarker.endTime} WIB\nPresensi Masuk: ${timeMarker.formattedDisplay}`}
+                                >
+                                  <div className="h-1.5 w-full bg-slate-200/90 rounded-full relative overflow-visible">
+                                    <div 
+                                      className="h-full bg-emerald-500/50 rounded-full" 
+                                      style={{ width: `${timeMarker.percentage}%` }}
+                                    />
+                                    {/* Titik Penanda Garis Waktu */}
+                                    <div 
+                                      className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 flex flex-col items-center"
+                                      style={{ left: `${timeMarker.percentage}%` }}
+                                    >
+                                      <span className="w-2 h-2 rounded-full bg-emerald-700 ring-1 ring-white shadow-2xs"></span>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           ) : (
-                            /* TAMPILAN STANDAR (TIDAK PENUH): Nama Lengkap Guru, Nama Mapel, dan Nama Ruangan */
+                            /* TAMPILAN STANDAR (TIDAK PENUH): Nama Lengkap Guru, Nama Mapel, dan Garis Waktu Presensi */
                             <>
                               <div className="w-full">
                                 <div className="flex items-center justify-between text-[10px] mb-1">
                                   <span className="font-bold font-mono">[{schedule.kodeGuru}]</span>
                                   {span > 1 ? (
                                     <span className="text-[9px] font-bold text-slate-700 bg-black/5 px-1 rounded font-mono">
-                                      {span} JP
+                                      {span} JP ({slotStartTime} - {slotEndTime})
                                     </span>
                                   ) : (
-                                    <span className="font-mono text-slate-400">Jam {schedule.jamKe}</span>
+                                    <span className="font-mono text-slate-400">Jam {schedule.jamKe} ({slotStartTime} - {slotEndTime})</span>
                                   )}
                                 </div>
                                 <div className="font-bold text-xs truncate" title={slot.subject?.namaMapel || schedule.kodeMapel}>
@@ -789,6 +830,40 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                                     : slot.teacher?.namaLengkap || schedule.kodeGuru}
                                 </div>
                               </div>
+
+                              {/* Garis Waktu Presensi KBM Lengkap */}
+                              {timeMarker && (
+                                <div 
+                                  className="w-full my-1.5 p-1.5 bg-white/70 rounded-lg border border-black/5 space-y-1"
+                                  title={`Jadwal KBM: ${timeMarker.startTime} - ${timeMarker.endTime} WIB\nWaktu Absen Masuk: ${timeMarker.formattedDisplay}`}
+                                >
+                                  <div className="flex items-center justify-between text-[9px] font-mono text-slate-500 font-semibold">
+                                    <span>{timeMarker.startTime}</span>
+                                    <span className="font-bold text-emerald-800 bg-emerald-100 px-1 py-0.2 rounded border border-emerald-300 flex items-center gap-0.5">
+                                      📍 Absen: {timeMarker.absenTime}
+                                    </span>
+                                    <span>{timeMarker.endTime}</span>
+                                  </div>
+
+                                  {/* Track Garis Waktu */}
+                                  <div className="h-2 w-full bg-slate-200/90 rounded-full relative overflow-visible">
+                                    <div 
+                                      className="h-full bg-emerald-500/40 rounded-full" 
+                                      style={{ width: `${timeMarker.percentage}%` }} 
+                                    />
+                                    {/* Pin Penanda di Garis Waktu */}
+                                    <div 
+                                      className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 flex flex-col items-center"
+                                      style={{ left: `${timeMarker.percentage}%` }}
+                                    >
+                                      <span className="w-3 h-3 rounded-full bg-emerald-600 ring-2 ring-white shadow-xs flex items-center justify-center">
+                                        <span className="w-1 h-1 rounded-full bg-white"></span>
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
                               <div className="w-full pt-1 border-t border-black/5 flex items-center justify-between text-[9px] text-slate-500 font-mono">
                                 <span className="truncate max-w-[100px]">{slot.activeRoom}</span>
                                 <span className={
@@ -842,6 +917,11 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                     cls.namaKelas === highlightedClassName
                   )
                 );
+                const isRecentlyUpdated = Boolean(
+                  recentlyUpdatedClasses && recentlyUpdatedClasses.some(
+                    c => normalizeClassName(c) === normalizeClassName(cls.namaKelas) || c === cls.namaKelas
+                  )
+                );
 
                 return (
                   <tr 
@@ -850,6 +930,8 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                     className={`transition-all duration-300 ${
                       isHighlighted 
                         ? 'bg-amber-100/90 ring-2 ring-indigo-500 shadow-md scale-[1.002] z-20' 
+                        : isRecentlyUpdated
+                        ? 'bg-emerald-100/80 ring-2 ring-emerald-500 shadow-lg scale-[1.002] z-20 animate-pulse'
                         : 'hover:bg-slate-50/60'
                     } ${
                       isUltraCompact ? 'h-[29px]' : 'h-[72px]'
@@ -858,11 +940,23 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                     <td 
                       style={{ width: `${classColWidthPercent}%` }}
                       className={`px-2 z-10 border-r border-slate-200 font-medium py-0.5 transition-colors ${
-                        isHighlighted ? 'bg-amber-100 font-black text-indigo-900' : 'bg-white'
+                        isHighlighted 
+                          ? 'bg-amber-100 font-black text-indigo-900' 
+                          : isRecentlyUpdated
+                          ? 'bg-emerald-100 font-black text-emerald-950'
+                          : 'bg-white'
                       }`}
                     >
                       <div className="flex items-center justify-between gap-1 leading-none">
-                        <span className="font-bold text-slate-900 text-xs font-mono">{shortName}</span>
+                        <div className="flex items-center gap-1 min-w-0">
+                          <span className="font-bold text-slate-900 text-xs font-mono">{shortName}</span>
+                          {isRecentlyUpdated && (
+                            <span className="flex items-center gap-0.5 text-[9px] font-bold bg-emerald-600 text-white px-1.5 py-0.5 rounded-full animate-bounce shrink-0" title="Presensi Baru Saja Masuk!">
+                              <BellRing className="w-2.5 h-2.5" />
+                              <span className="hidden sm:inline">Baru</span>
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[10px] text-slate-500 font-mono truncate max-w-[50px]">{cls.lokasiRuang}</span>
                       </div>
                     </td>

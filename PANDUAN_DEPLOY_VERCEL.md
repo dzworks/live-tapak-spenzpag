@@ -125,4 +125,40 @@ vercel --prod
 
 ---
 
+## 5. Cara Membuat URL Backend Apps Script Permanen untuk Seluruh Perangkat (Multi-Device)
+
+Secara bawaan, jika Anda menginput link Apps Script langsung dari pop-up di browser, link tersebut tersimpan di `localStorage` perangkat tersebut. Akibatnya, saat link dibuka di perangkat lain (misal HP guru, laptop pengawas, atau TV koridor), pop-up akan muncul lagi.
+
+Agar **seluruh perangkat di dunia otomatis langsung membuka dashboard tanpa pernah perlu menginput link lagi**, gunakan salah satu dari dua cara berikut:
+
+### Opsi A: Menggunakan Vercel Environment Variable (Paling Cepat & Direkomendasikan)
+1. Buka dashboard [https://vercel.com](https://vercel.com) dan pilih proyek Anda.
+2. Klik tab **Settings** di bagian atas, lalu pilih menu **Environment Variables** di bilah kiri.
+3. Tambahkan variabel baru:
+   - **Key**: `VITE_APPS_SCRIPT_URL`
+   - **Value**: Tempelkan URL deployment Apps Script Anda (misal: `https://script.google.com/macros/s/AKfycb.../exec`)
+   - **Environments**: Centang *Production*, *Preview*, dan *Development*.
+4. Klik tombol **Save**.
+5. Masuk ke tab **Deployments**, klik titik tiga (`...`) pada deployment terbaru, lalu klik **Redeploy**.
+6. **Selesai!** Sekarang setiap orang dan setiap perangkat manapun yang membuka alamat web Anda akan otomatis langsung melihat dashboard tanpa pop-up!
+
+---
+
+### Opsi B: Menyimpan Permanen ke GitHub Repository (`public/app-config.json`)
+Aplikasi ini sudah diprogram untuk otomatis membaca file statis `public/app-config.json` saat pertama kali dimuat di browser manapun:
+1. Buka repositori GitHub Anda.
+2. Buka file `public/app-config.json` (atau klik tombol **Salin JSON / Unduh File** di menu **Admin** aplikasi).
+3. Isi kolom `appsScriptUrl` dengan URL deployment Apps Script Anda, contoh:
+   ```json
+   {
+     "appsScriptUrl": "https://script.google.com/macros/s/AKfycb.../exec",
+     "adminPin": "1234",
+     "updatedAt": "2026-10-16T00:00:00.000Z"
+   }
+   ```
+4. Commit dan push perubahan tersebut ke branch `main`.
+5. Vercel akan otomatis melakukan deploy ulang, dan semua perangkat otomatis terhubung ke spreadsheet Anda secara permanen.
+
+---
+
 *Selamat! Aplikasi Monitoring Kehadiran Kelas Anda kini siap digunakan dan ter-deploy secara profesional di Vercel.*
