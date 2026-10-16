@@ -65,9 +65,9 @@ function doGet(e) {
       'Hari', 'Jam Ke', 'Mapel Ke', 'Nama Kelas', 'Jam Mulai', 'Jam Selesai', 'Kode Guru', 'Kode Mapel'
     ]);
     const attendanceLogs = readSheetAsObjects(ss, 'AttendanceLogs', [
-      'Tanggal', 'Waktu Absen (WIB)', 'Kelas', 'Mapel Ke', 'Kode Guru', 'Status Kehadiran',
-      'Mata Pelajaran', 'Kegiatan Pembelajaran', 'Pengganti (Y/N)', 'Info Ketidakhadiran',
-      'Ruang Belajar', 'ID Kiriman'
+      'Tanggal', 'Waktu Absen (WIB)', 'Kelas', 'Mapel Ke', 'Kode Guru', 'Mata Pelajaran',
+      'Status Kehadiran', 'Jam Ke', 'Jam Mulai', 'Jam Selesai', 'Ruang Belajar',
+      'Kegiatan Pembelajaran', 'Info Ketidakhadiran', 'Pengganti (Y/N)', 'Sumber Data', 'ID Kiriman'
     ]);
 
     // 4. Normalisasi Data
@@ -114,10 +114,14 @@ function doGet(e) {
       kodeGuru: String(r['Kode Guru'] || '').trim(),
       statusKehadiran: String(r['Status Kehadiran'] || 'Hadir').trim(),
       mataPelajaran: String(r['Mata Pelajaran'] || '').trim(),
-      kegiatanPembelajaran: String(r['Kegiatan Pembelajaran'] || '').trim(),
-      pengganti: String(r['Pengganti (Y/N)'] || 'N').trim().toUpperCase(),
-      infoKetidakhadiran: String(r['Info Ketidakhadiran'] || '').trim(),
+      jamKe: String(r['Jam Ke'] || r['jam_ke'] || '').trim(),
+      jamMulai: String(r['Jam Mulai'] || '').trim(),
+      jamSelesai: String(r['Jam Selesai'] || '').trim(),
       ruangBelajar: String(r['Ruang Belajar'] || '').trim(),
+      kegiatanPembelajaran: String(r['Kegiatan Pembelajaran'] || '').trim(),
+      infoKetidakhadiran: String(r['Info Ketidakhadiran'] || '').trim(),
+      pengganti: String(r['Pengganti (Y/N)'] || 'N').trim().toUpperCase(),
+      sumberData: String(r['Sumber Data'] || '').trim(),
       idKiriman: String(r['ID Kiriman'] || '').trim()
     })).filter(l => l.kelas && l.tanggal);
 
@@ -174,7 +178,11 @@ function readSheetAsObjects(ss, sheetName, expectedHeaders) {
     rawHeaders.forEach((header, colIdx) => {
       let val = row[colIdx];
       if (val instanceof Date) {
-        val = Utilities.formatDate(val, Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm");
+        if (header.toLowerCase().includes('tanggal')) {
+          val = Utilities.formatDate(val, Session.getScriptTimeZone(), "dd-MMM-yyyy");
+        } else {
+          val = Utilities.formatDate(val, Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm");
+        }
       }
       obj[header] = val;
     });

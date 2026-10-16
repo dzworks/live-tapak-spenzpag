@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AttendanceRecord } from '../types';
+import { isSameDate } from '../utils/appsScriptCode';
 import { 
   Search, 
   Download, 
@@ -25,10 +26,10 @@ export const AttendanceFeed: React.FC<AttendanceFeedProps> = ({
   const [filterKelas, setFilterKelas] = useState<string>('all');
 
   const filteredRecords = records.filter(r => {
-    if (r.tanggal !== selectedDate) return false;
+    if (!isSameDate(r.tanggal, selectedDate)) return false;
     if (filterStatus === 'hadir' && (r.statusKehadiran !== 'Hadir' || r.pengganti === 'Y')) return false;
     if (filterStatus === 'pengganti' && r.pengganti !== 'Y') return false;
-    if (filterStatus === 'izin' && (r.statusKehadiran !== 'Izin' && r.statusKehadiran !== 'Sakit')) return false;
+    if (filterStatus === 'izin' && r.statusKehadiran === 'Hadir') return false;
     if (filterKelas !== 'all' && r.kelas !== filterKelas) return false;
 
     if (searchTerm.trim() !== '') {

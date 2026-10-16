@@ -12,7 +12,8 @@ import {
   EyeOff, 
   ShieldAlert,
   X,
-  FileCode2
+  FileCode2,
+  Sparkles
 } from 'lucide-react';
 import { maskAppsScriptUrl, getMaskVerificationSnippet } from '../utils/maskUrl';
 
@@ -29,8 +30,10 @@ export const AdminUrlModal: React.FC<AdminUrlModalProps> = ({
   currentUrl,
   onUrlUpdated,
 }) => {
-  // Autentikasi PIN
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const isFirstTimeSetup = !currentUrl || !currentUrl.trim();
+
+  // Jika setup awal (belum ada URL terekam di aplikasi), langsung izinkan pengisian URL
+  const [isAuthenticated, setIsAuthenticated] = useState(() => !currentUrl || !currentUrl.trim());
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
   const [isVerifyingPin, setIsVerifyingPin] = useState(false);

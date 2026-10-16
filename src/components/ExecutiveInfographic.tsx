@@ -12,7 +12,7 @@ import {
   Play
 } from 'lucide-react';
 import { ScheduleItem, AttendanceLogItem, MasterGuru, ClassMaster } from '../types';
-import { normalizeClassName } from '../utils/appsScriptCode';
+import { normalizeClassName, isSameDate } from '../utils/appsScriptCode';
 
 interface ExecutiveInfographicProps {
   schedules: ScheduleItem[];
@@ -70,7 +70,7 @@ export const ExecutiveInfographic: React.FC<ExecutiveInfographicProps> = ({
   }, [schedules, dayNameIndo]);
 
   const logsToday = useMemo(() => {
-    return attendanceLogs.filter(l => l.tanggal === selectedDate);
+    return attendanceLogs.filter(l => isSameDate(l.tanggal, selectedDate));
   }, [attendanceLogs, selectedDate]);
 
   // Sesi Aktif Saat Ini
@@ -89,10 +89,13 @@ export const ExecutiveInfographic: React.FC<ExecutiveInfographicProps> = ({
       const normSchedClass = normalizeClassName(sched.namaKelas);
       const matchedLog = logsToday.find(l => {
         const normLogClass = normalizeClassName(l.kelas);
-        return normLogClass === normSchedClass && (
-          l.mapelKe === sched.mapelKe || 
-          (l.periods && l.periods.includes(activePeriodNumber))
-        );
+        if (normLogClass !== normSchedClass) return false;
+        if (l.periods && l.periods.length > 0 && sched.periods && sched.periods.length > 0) {
+          if (l.periods.some(p => sched.periods.includes(p))) return true;
+        }
+        if (l.mapelKe && sched.mapelKe && Number(l.mapelKe) === Number(sched.mapelKe)) return true;
+        if (l.kodeGuru && sched.kodeGuru && l.kodeGuru.toLowerCase() === sched.kodeGuru.toLowerCase()) return true;
+        return false;
       });
 
       if (matchedLog && (matchedLog.statusKehadiran === 'Hadir' || matchedLog.pengganti === 'Y')) {

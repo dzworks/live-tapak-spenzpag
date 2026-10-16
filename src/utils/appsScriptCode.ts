@@ -12,11 +12,99 @@ import {
 } from '../types';
 import { PERIOD_SCHEDULES_REGULAR, PERIOD_SCHEDULES_FRIDAY } from '../data/initialData';
 
+const MONTH_NAMES_ID = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nop', 'Des'];
+
+/**
+ * Normalisasi format tanggal ke bentuk kanonik YYYY-MM-DD untuk komparasi aman
+ * Menerima variasi: "16-Okt-2026", "16-Oct-2026", "2026-10-16", "16/10/2026", Date object
+ */
+export function canonicalDateKey(dateStr: string | Date | undefined | null): string {
+  if (!dateStr) return '';
+  if (dateStr instanceof Date) {
+    const y = dateStr.getFullYear();
+    const m = String(dateStr.getMonth() + 1).padStart(2, '0');
+    const d = String(dateStr.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  const clean = String(dateStr).trim().split(/[\sT]/)[0]; // Buang waktu jika ada (misal: 2026-10-16 00:00)
+
+  // Format 1: YYYY-MM-DD
+  const ymdMatch = clean.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+  if (ymdMatch) {
+    const y = ymdMatch[1];
+    const m = ymdMatch[2].padStart(2, '0');
+    const d = ymdMatch[3].padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  // Format 2: DD-MM-YYYY atau DD/MM/YYYY
+  const dmyNumericMatch = clean.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (dmyNumericMatch) {
+    const d = dmyNumericMatch[1].padStart(2, '0');
+    const m = dmyNumericMatch[2].padStart(2, '0');
+    const y = dmyNumericMatch[3];
+    return `${y}-${m}-${d}`;
+  }
+
+  // Format 3: DD-Mmm-YYYY (e.g. "16-Okt-2026", "16-Oct-2026", "16 Okt 2026")
+  const idMonthMap: Record<string, string> = {
+    jan: '01', feb: '02', mar: '03', apr: '04', mei: '05', may: '05', jun: '06',
+    jul: '07', agu: '08', aug: '08', sep: '09', okt: '10', oct: '10', nop: '11', nov: '11', des: '12', dec: '12'
+  };
+  const dmyNamedMatch = clean.match(/^(\d{1,2})[-/\s]([a-zA-Z]{3,4})[-/\s](\d{4})$/);
+  if (dmyNamedMatch) {
+    const d = dmyNamedMatch[1].padStart(2, '0');
+    const mStr = dmyNamedMatch[2].toLowerCase().slice(0, 3);
+    const m = idMonthMap[mStr] || '10';
+    const y = dmyNamedMatch[3];
+    return `${y}-${m}-${d}`;
+  }
+
+  return clean;
+}
+
+/**
+ * Mengecek apakah dua tanggal sama terlepas dari variasi penulisan
+ */
+export function isSameDate(date1: string | Date | undefined | null, date2: string | Date | undefined | null): boolean {
+  if (!date1 || !date2) return false;
+  return canonicalDateKey(date1) === canonicalDateKey(date2);
+}
+
+/**
+ * Memformat tanggal ke bentuk standar tampilan Bahasa Indonesia: "16-Okt-2026"
+ */
+export function formatToIndonesianDisplayDate(dateStr: string | Date | undefined | null): string {
+  if (!dateStr) return '';
+  const key = canonicalDateKey(dateStr);
+  if (!key) return String(dateStr);
+  const parts = key.split('-');
+  if (parts.length === 3) {
+    const day = parts[2].replace(/^0/, '');
+    const monthIndex = parseInt(parts[1], 10) - 1;
+    const year = parts[0];
+    const mName = MONTH_NAMES_ID[monthIndex] || 'Okt';
+    return `${day.padStart(2, '0')}-${mName}-${year}`;
+  }
+  return String(dateStr);
+}
+
+/**
+ * Mendapatkan tanggal hari ini dalam format WIB (UTC+7) "16-Okt-2026"
+ */
+export function getTodayWIBDisplayDate(): string {
+  const now = new Date();
+  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+  const wibDate = new Date(utc + 3600000 * 7);
+  return formatToIndonesianDisplayDate(wibDate);
+}
+
 /**
  * Parser rentang jam pelajaran yang fleksibel dan tangguh
  * Contoh: "1-2" -> start: 1, end: 2, span: 2, periods: [1, 2]
- *         "3-4" -> start: 3, end: 4, span: 2, periods: [3, 4]
- *         "1-3" -> start: 1, end: 3, span: 3, periods: [1, 2, 3]
+ *         "1 - 3" -> start: 1, end: 3, span: 3, periods: [1, 2, 3]
+ *         "3 - 5" -> start: 3, end: 5, span: 3, periods: [3, 4, 5]
+ *         "1 - 9" -> start: 1, end: 9, span: 9, periods: [1, 2, 3, 4, 5, 6, 7, 8, 9]
  *         "5"   -> start: 5, end: 5, span: 1, periods: [5]
  */
 export function parsePeriodRange(jamKeValue: string | number): {
@@ -28,7 +116,7 @@ export function parsePeriodRange(jamKeValue: string | number): {
 } {
   const str = String(jamKeValue ?? '1').trim();
   
-  // Pola rentang seperti "1-2", "1 - 2", "1 s/d 2", "1 sd 2", "1,2"
+  // Pola rentang seperti "1-2", "1 - 2", "1 - 3", "1 s/d 3", "1 sd 3", "1,2,3"
   const delimiterRegex = /[-–—]|s\/?d|,/i;
   if (delimiterRegex.test(str)) {
     const parts = str.split(delimiterRegex).map(p => parseInt(p.trim(), 10)).filter(n => !isNaN(n));
@@ -64,40 +152,23 @@ export function parsePeriodRange(jamKeValue: string | number): {
 
 /**
  * Menentukan nama hari dalam bahasa Indonesia dari string tanggal
- * Contoh: "09-Okt-2026" -> "Jumat", "2026-10-12" -> "Senin"
+ * Contoh: "16-Okt-2026" -> "Jumat", "2026-10-12" -> "Senin"
  */
 export function getDayNameIndonesian(dateStr: string): string {
   if (!dateStr) return 'Jumat';
-  const clean = dateStr.trim();
+  const key = canonicalDateKey(dateStr);
+  if (!key) return 'Jumat';
 
-  const idMonthMap: Record<string, number> = {
-    jan: 0, feb: 1, mar: 2, apr: 3, mei: 4, may: 4, jun: 5,
-    jul: 6, agu: 7, aug: 7, sep: 8, okt: 9, oct: 9, nop: 10, nov: 10, des: 11, dec: 11
-  };
-
-  let d: Date | null = null;
-  const parts = clean.split(/[-/]/);
+  const parts = key.split('-');
   if (parts.length === 3) {
-    if (parts[0].length === 4) {
-      // YYYY-MM-DD
-      d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-    } else {
-      // DD-Mmm-YYYY
-      const dayNum = parseInt(parts[0], 10);
-      const mStr = parts[1].toLowerCase().slice(0, 3);
-      const yearNum = parseInt(parts[2], 10);
-      const monthIdx = idMonthMap[mStr] !== undefined ? idMonthMap[mStr] : (parseInt(parts[1], 10) - 1 || 0);
-      d = new Date(yearNum, monthIdx, dayNum);
+    const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    if (!isNaN(d.getTime())) {
+      const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+      return days[d.getDay()];
     }
-  } else {
-    d = new Date(clean);
   }
 
-  if (!d || isNaN(d.getTime())) return 'Jumat';
-
-  const dayOfWeek = d.getDay(); // 0: Minggu, 1: Senin, 2: Selasa, 3: Rabu, 4: Kamis, 5: Jumat, 6: Sabtu
-  const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-  return days[dayOfWeek];
+  return 'Jumat';
 }
 
 /**
@@ -127,11 +198,13 @@ export function enrichScheduleItem(raw: any): ScheduleItem {
  * Normalisasi dan enrich raw Attendance Log Item
  */
 export function enrichAttendanceLogItem(raw: any): AttendanceLogItem {
-  const rawJamKe = raw.jamKe || raw['Jam Ke'] || raw.mapelKe || '1';
+  const rawJamKe = raw.jamKe || raw['Jam Ke'] || raw.jam_ke || raw['jam_ke'] || raw.mapelKe || '1';
   const parsed = parsePeriodRange(rawJamKe);
+  const rawTanggal = raw.tanggal || raw['Tanggal'] || '';
+  const displayTanggal = formatToIndonesianDisplayDate(rawTanggal);
 
   return {
-    tanggal: String(raw.tanggal || raw['Tanggal'] || '').trim(),
+    tanggal: displayTanggal,
     waktuAbsen: String(raw.waktuAbsen || raw['Waktu Absen (WIB)'] || raw['Waktu Absen'] || '').trim(),
     kelas: String(raw.kelas || raw['Kelas'] || '').trim(),
     mapelKe: Number(raw.mapelKe || raw['Mapel Ke']) || 1,
@@ -143,6 +216,10 @@ export function enrichAttendanceLogItem(raw: any): AttendanceLogItem {
     infoKetidakhadiran: String(raw.infoKetidakhadiran || raw['Info Ketidakhadiran'] || '').trim(),
     ruangBelajar: String(raw.ruangBelajar || raw['Ruang Belajar'] || '').trim(),
     idKiriman: String(raw.idKiriman || raw['ID Kiriman'] || ('log_' + Math.random().toString(36).slice(2))).trim(),
+    jamKe: parsed.normalizedStr,
+    jamMulai: String(raw.jamMulai || raw['Jam Mulai'] || '').trim(),
+    jamSelesai: String(raw.jamSelesai || raw['Jam Selesai'] || '').trim(),
+    sumberData: String(raw.sumberData || raw['Sumber Data'] || '').trim(),
     startPeriod: parsed.startPeriod,
     endPeriod: parsed.endPeriod,
     spanJP: parsed.spanJP,
@@ -253,19 +330,30 @@ export function resolveScheduleSlot(
   const normScheduleClass = normalizeClassName(schedule.namaKelas);
 
   // Cari log kehadiran yang cocok untuk kelas dan jadwal ini
-  // Pencocokan: kelas sama & (mapelKe sama ATAU periods beririsan)
+  // Pencocokan: kelas sama & (periods beririsan ATAU mapelKe sama ATAU guru sama)
   const matchingLog = attendanceLogsForDate.find(log => {
     const normLogClass = normalizeClassName(log.kelas);
     if (normLogClass !== normScheduleClass) return false;
 
-    // Cek urutan mapel jika cocok
-    if (log.mapelKe && schedule.mapelKe && log.mapelKe === schedule.mapelKe) {
+    // 1. Prioritas Utama: Irisan jam pelajaran (periods overlap)
+    // Jika log mencakup Jam 1-3, maka slot jam 1, jam 2, dan jam 3 otomatis MATCH (hadir seluruhnya)
+    if (log.periods && log.periods.length > 0 && schedule.periods && schedule.periods.length > 0) {
+      if (log.periods.some(p => schedule.periods.includes(p))) {
+        return true;
+      }
+    }
+
+    // 2. Prioritas Kedua: Urutan mapel sama pada kelas tersebut
+    if (log.mapelKe && schedule.mapelKe && Number(log.mapelKe) === Number(schedule.mapelKe)) {
       return true;
     }
 
-    // Cek irisan jam
-    if (log.periods && log.periods.length > 0) {
-      return log.periods.some(p => schedule.periods.includes(p));
+    // 3. Prioritas Ketiga: Kesamaan kode guru pada kelas tersebut
+    if (
+      log.kodeGuru && schedule.kodeGuru &&
+      log.kodeGuru.toLowerCase() === schedule.kodeGuru.toLowerCase()
+    ) {
+      return true;
     }
 
     return false;

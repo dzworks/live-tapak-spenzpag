@@ -17,7 +17,8 @@ import {
 import { 
   getDayNameIndonesian, 
   resolveScheduleSlot,
-  normalizeClassName 
+  normalizeClassName,
+  isSameDate
 } from '../utils/appsScriptCode';
 import { 
   Search,
@@ -113,7 +114,7 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
 
   // Log kehadiran untuk tanggal terpilih
   const logsForSelectedDate = useMemo(() => {
-    return attendanceLogs.filter(l => l.tanggal === selectedDate);
+    return attendanceLogs.filter(l => isSameDate(l.tanggal, selectedDate));
   }, [attendanceLogs, selectedDate]);
 
   // Ref untuk mengukur posisi kolom jam aktif guna menempatkan garis vertikal real-time

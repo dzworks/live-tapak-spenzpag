@@ -1,6 +1,6 @@
 {
-  "summary": "Rencana implementasi vercel.json untuk routing SPA Vite serta pembuatan panduan instalasi GitHub ke Vercel dan cara update (redeploy) dalam format Markdown (PANDUAN_DEPLOY_VERCEL.md).",
-  "updatedAt": "2026-10-15T11:49:09.138239103Z",
+  "summary": "Rencana implementasi penyesuaian sinkronisasi data presensi AttendanceLogs:\n- Integrasi schema lengkap kolom AttendanceLogs (Tanggal, Waktu Absen, Kelas, Mapel Ke, Kode Guru, Mata Pelajaran, Status Kehadiran, Jam Ke, Jam Mulai, Jam Selesai, Ruang Belajar, Kegiatan Pembelajaran, Info Ketidakhadiran, Pengganti, ID Kiriman).\n- Penanganan multi-jam KBM otomatis hadir di seluruh rentang periode (misal: Jam 1 - 3 menandai hadir pada Jam 1, Jam 2, dan Jam 3).\n- Deteksi otomatis tanggal hari ini/terbaru saat sinkronisasi, serta pemilih tanggal bulan berjalan yang fleksibel.\n- Normalisasi format tanggal (DD-Mmm-YYYY, YYYY-MM-DD, Date object Sheets) agar pencocokan presensi 100% akurat.\n- Pembaruan skrip Google Apps Script (Code.gs) dan data awal fallback lokal dengan contoh data riil sekolah.",
+  "updatedAt": "2026-10-16T02:25:18.488120912Z",
   "requestFeedback": true,
   "userFacing": true
 }

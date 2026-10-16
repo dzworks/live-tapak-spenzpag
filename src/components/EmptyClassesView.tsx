@@ -17,7 +17,8 @@ import {
 } from '../data/initialData';
 import { 
   getDayNameIndonesian, 
-  normalizeClassName 
+  normalizeClassName,
+  isSameDate
 } from '../utils/appsScriptCode';
 import { 
   AlertTriangle, 
@@ -79,7 +80,7 @@ export const EmptyClassesView: React.FC<EmptyClassesViewProps> = ({
 
   // Log kehadiran tanggal ini
   const logsToday = React.useMemo(() => {
-    return records.filter(r => r.tanggal === selectedDate);
+    return records.filter(r => isSameDate(r.tanggal, selectedDate));
   }, [records, selectedDate]);
 
   // Deteksi kelas kosong di jam aktif sekarang
@@ -99,7 +100,13 @@ export const EmptyClassesView: React.FC<EmptyClassesViewProps> = ({
       const normSchedClass = normalizeClassName(sched.namaKelas);
       const matchLog = logsToday.find(l => {
         const normLogClass = normalizeClassName(l.kelas);
-        return normLogClass === normSchedClass && (l.mapelKe === sched.mapelKe || (l.periods && l.periods.includes(activePeriodNumber)));
+        if (normLogClass !== normSchedClass) return false;
+        if (l.periods && l.periods.length > 0 && sched.periods && sched.periods.length > 0) {
+          if (l.periods.some(p => sched.periods.includes(p))) return true;
+        }
+        if (l.mapelKe && sched.mapelKe && Number(l.mapelKe) === Number(sched.mapelKe)) return true;
+        if (l.kodeGuru && sched.kodeGuru && l.kodeGuru.toLowerCase() === sched.kodeGuru.toLowerCase()) return true;
+        return false;
       });
 
       const teacher = teachersMap[sched.kodeGuru];

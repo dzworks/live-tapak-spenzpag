@@ -55,6 +55,9 @@ export interface AttendanceLogItem {
 
   // Metadata hasil parsing rentang jam jika ada
   jamKe?: string;
+  jamMulai?: string;
+  jamSelesai?: string;
+  sumberData?: string;
   startPeriod?: number;
   endPeriod?: number;
   spanJP?: number;

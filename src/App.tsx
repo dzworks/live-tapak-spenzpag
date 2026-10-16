@@ -30,7 +30,11 @@ import {
   processTapakBundle, 
   getCurrentPeriodInfo,
   getDayNameIndonesian,
-  normalizeClassName
+  normalizeClassName,
+  isSameDate,
+  getTodayWIBDisplayDate,
+  formatToIndonesianDisplayDate,
+  canonicalDateKey
 } from './utils/appsScriptCode';
 import { TopNav } from './components/TopNav';
 import { UnconfirmedClassesSection } from './components/UnconfirmedClassesSection';
@@ -40,9 +44,9 @@ import { EmptyClassesView } from './components/EmptyClassesView';
 import { AttendanceFeed } from './components/AttendanceFeed';
 import { DetailModal } from './components/DetailModal';
 import { AdminUrlModal } from './components/AdminUrlModal';
+import { InitialSetupModal } from './components/InitialSetupModal';
 import { 
   Calendar, 
-  SlidersHorizontal, 
   Info,
   RefreshCw
 } from 'lucide-react';
@@ -50,38 +54,42 @@ import {
 export default function App() {
   // 1. DATA STORE: 6 Sheet Database TAPAK (dengan fallback offline data yang presisi)
   const [masterGuru, setMasterGuru] = useState<MasterGuru[]>(() => {
-    const saved = localStorage.getItem('gurulive_tapak_guru_v1');
+    const saved = localStorage.getItem('gurulive_tapak_guru_v2');
     return saved ? JSON.parse(saved) : DEFAULT_MASTER_GURU;
   });
 
   const [masterMapel, setMasterMapel] = useState<MasterMapel[]>(() => {
-    const saved = localStorage.getItem('gurulive_tapak_mapel_v1');
+    const saved = localStorage.getItem('gurulive_tapak_mapel_v2');
     return saved ? JSON.parse(saved) : DEFAULT_MASTER_MAPEL;
   });
 
   const [classes, setClasses] = useState<ClassMaster[]>(() => {
-    const saved = localStorage.getItem('gurulive_tapak_classes_v1');
+    const saved = localStorage.getItem('gurulive_tapak_classes_v2');
     return saved ? JSON.parse(saved) : DEFAULT_CLASSES;
   });
 
   const [masterRuangan, setMasterRuangan] = useState<MasterRuangan[]>(() => {
-    const saved = localStorage.getItem('gurulive_tapak_ruangan_v1');
+    const saved = localStorage.getItem('gurulive_tapak_ruangan_v2');
     return saved ? JSON.parse(saved) : DEFAULT_MASTER_RUANGAN;
   });
 
   const [schedules, setSchedules] = useState<ScheduleItem[]>(() => {
-    const saved = localStorage.getItem('gurulive_tapak_schedules_v1');
+    const saved = localStorage.getItem('gurulive_tapak_schedules_v2');
     return saved ? JSON.parse(saved) : DEFAULT_SCHEDULES;
   });
 
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLogItem[]>(() => {
-    const saved = localStorage.getItem('gurulive_tapak_logs_v1');
+    const saved = localStorage.getItem('gurulive_tapak_logs_v2');
     return saved ? JSON.parse(saved) : DEFAULT_ATTENDANCE_LOGS;
   });
 
   // 2. UI State & Density Mode (Ultra-Compact 23 Kelas default)
   const [currentTab, setCurrentTab] = useState<ViewTab>('matrix');
-  const [selectedDate, setSelectedDate] = useState<string>('09-Okt-2026'); // Tanggal default Jumat KBM
+  // Otomatis prioritaskan tanggal hari ini (WIB UTC+7) atau fallback 16-Okt-2026
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    const today = getTodayWIBDisplayDate();
+    return today || '16-Okt-2026';
+  });
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const [isUltraCompact, setIsUltraCompact] = useState<boolean>(true);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
@@ -114,10 +122,11 @@ export default function App() {
   const dayNameIndo = useMemo(() => getDayNameIndonesian(selectedDate), [selectedDate]);
   const isWeekend = dayType === 'weekend';
 
-  // Jam Real-time & Simulator Jam
+  // Jam Real-time & Sesi KBM Aktif (100% Otomatis Mengikuti Waktu Nyata WIB)
   const [wibTimeStr, setWibTimeStr] = useState<string>('10:14:00 WIB');
-  const [simulatedPeriod, setSimulatedPeriod] = useState<number | null>(4); // default Jam 4 aktif
-  const [isSimulatingPeriod, setIsSimulatingPeriod] = useState<boolean>(true);
+  const [activePeriodNumber, setActivePeriodNumber] = useState<number>(() => {
+    return getCurrentPeriodInfo(getScheduleForDate(selectedDate)).activePeriod;
+  });
 
   // Read-Only Detail Modal Slot
   const [selectedSlot, setSelectedSlot] = useState<ResolvedScheduleSlot | null>(null);
@@ -126,6 +135,14 @@ export default function App() {
   const [appsScriptUrl, setAppsScriptUrl] = useState<string>(() => {
     return localStorage.getItem('gurulive_apps_script_url') || CONFIG.APPS_SCRIPT_URL || '';
   });
+  
+  // Pop-up awal muncul HANYA jika di aplikasi belum ada link backend terekam
+  // Apabila terekam link backend, isInitialSetupOpen bernilai false (langsung menampilkan dashboard)
+  const [isInitialSetupOpen, setIsInitialSetupOpen] = useState<boolean>(() => {
+    const saved = localStorage.getItem('gurulive_apps_script_url') || CONFIG.APPS_SCRIPT_URL || '';
+    return !saved || !saved.trim();
+  });
+
   const [isAdminModalOpen, setIsAdminModalOpen] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isLiveConnected, setIsLiveConnected] = useState<boolean>(false);
@@ -133,17 +150,17 @@ export default function App() {
 
   // Persist ke localStorage saat data berubah
   useEffect(() => {
-    localStorage.setItem('gurulive_tapak_guru_v1', JSON.stringify(masterGuru));
-    localStorage.setItem('gurulive_tapak_mapel_v1', JSON.stringify(masterMapel));
-    localStorage.setItem('gurulive_tapak_classes_v1', JSON.stringify(classes));
-    localStorage.setItem('gurulive_tapak_ruangan_v1', JSON.stringify(masterRuangan));
-    localStorage.setItem('gurulive_tapak_schedules_v1', JSON.stringify(schedules));
-    localStorage.setItem('gurulive_tapak_logs_v1', JSON.stringify(attendanceLogs));
+    localStorage.setItem('gurulive_tapak_guru_v2', JSON.stringify(masterGuru));
+    localStorage.setItem('gurulive_tapak_mapel_v2', JSON.stringify(masterMapel));
+    localStorage.setItem('gurulive_tapak_classes_v2', JSON.stringify(classes));
+    localStorage.setItem('gurulive_tapak_ruangan_v2', JSON.stringify(masterRuangan));
+    localStorage.setItem('gurulive_tapak_schedules_v2', JSON.stringify(schedules));
+    localStorage.setItem('gurulive_tapak_logs_v2', JSON.stringify(attendanceLogs));
   }, [masterGuru, masterMapel, classes, masterRuangan, schedules, attendanceLogs]);
 
-  // Live Clock updater
+  // Live Clock updater: Menghitung waktu WIB dan jam pelajaran KBM aktif setiap detik secara real-time
   useEffect(() => {
-    const timer = setInterval(() => {
+    const updateTimeAndPeriod = () => {
       const now = new Date();
       const utcHours = now.getUTCHours();
       const wibHours = (utcHours + 7) % 24;
@@ -151,23 +168,14 @@ export default function App() {
       const sec = String(now.getUTCSeconds()).padStart(2, '0');
       setWibTimeStr(`${String(wibHours).padStart(2, '0')}:${min}:${sec} WIB`);
 
-      if (!isSimulatingPeriod) {
-        const info = getCurrentPeriodInfo(currentSchedules);
-        setSimulatedPeriod(info.activePeriod);
-      }
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [isSimulatingPeriod, currentSchedules]);
+      const info = getCurrentPeriodInfo(currentSchedules);
+      setActivePeriodNumber(info.activePeriod);
+    };
 
-  // Adjust simulated period if outside bounds of the selected day's schedules
-  useEffect(() => {
-    if (currentSchedules.length > 0 && simulatedPeriod !== null) {
-      const maxPeriod = currentSchedules[currentSchedules.length - 1].period;
-      if (simulatedPeriod > maxPeriod) {
-        setSimulatedPeriod(maxPeriod);
-      }
-    }
-  }, [currentSchedules, simulatedPeriod]);
+    updateTimeAndPeriod();
+    const timer = setInterval(updateTimeAndPeriod, 1000);
+    return () => clearInterval(timer);
+  }, [currentSchedules]);
 
   // Handle Fullscreen Toggle
   const handleToggleFullscreen = () => {
@@ -187,12 +195,6 @@ export default function App() {
     document.addEventListener('fullscreenchange', onFsChange);
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
-
-  // Current active period calculation
-  const activePeriodNumber = useMemo(() => {
-    if (simulatedPeriod !== null) return simulatedPeriod;
-    return getCurrentPeriodInfo(currentSchedules).activePeriod;
-  }, [simulatedPeriod, currentSchedules]);
 
   // Current active period schedule info (startTime, endTime, label)
   const activePeriodScheduleInfo = useMemo(() => {
@@ -226,7 +228,20 @@ export default function App() {
         if (bundle.classes.length > 0) setClasses(bundle.classes);
         if (bundle.masterRuangan.length > 0) setMasterRuangan(bundle.masterRuangan);
         if (bundle.schedules.length > 0) setSchedules(bundle.schedules);
-        if (bundle.attendanceLogs.length > 0) setAttendanceLogs(bundle.attendanceLogs);
+        if (bundle.attendanceLogs.length > 0) {
+          setAttendanceLogs(bundle.attendanceLogs);
+          // Prioritaskan tanggal hari ini (WIB) atau tanggal terbaru dari attendance logs
+          const todayWIB = getTodayWIBDisplayDate();
+          const hasToday = bundle.attendanceLogs.some(l => isSameDate(l.tanggal, todayWIB));
+          if (hasToday) {
+            setSelectedDate(todayWIB);
+          } else {
+            const latest = bundle.attendanceLogs[bundle.attendanceLogs.length - 1];
+            if (latest && latest.tanggal) {
+              setSelectedDate(formatToIndonesianDisplayDate(latest.tanggal));
+            }
+          }
+        }
 
         setIsLiveConnected(true);
         setSyncMessage(`Sinkronisasi 6 Sheet Sukses: ${bundle.classes.length} Kelas, ${bundle.schedules.length} Jadwal, ${bundle.attendanceLogs.length} Log Presensi.`);
@@ -295,7 +310,7 @@ export default function App() {
       s => s.hari.toLowerCase() === dayNameIndo.toLowerCase() && s.periods.includes(activePeriodNumber)
     );
 
-    const logsToday = attendanceLogs.filter(l => l.tanggal === selectedDate);
+    const logsToday = attendanceLogs.filter(l => isSameDate(l.tanggal, selectedDate));
 
     let presentCount = 0;
     let substituteCount = 0;
@@ -306,7 +321,15 @@ export default function App() {
       const normSchedClass = normalizeClassName(sched.namaKelas);
       const matchedLog = logsToday.find(l => {
         const normLogClass = normalizeClassName(l.kelas);
-        return normLogClass === normSchedClass && (l.mapelKe === sched.mapelKe || (l.periods && l.periods.includes(activePeriodNumber)));
+        if (normLogClass !== normSchedClass) return false;
+        
+        // Multi-period overlap match
+        if (l.periods && l.periods.length > 0 && sched.periods && sched.periods.length > 0) {
+          if (l.periods.some(p => sched.periods.includes(p))) return true;
+        }
+        if (l.mapelKe && sched.mapelKe && Number(l.mapelKe) === Number(sched.mapelKe)) return true;
+        if (l.kodeGuru && sched.kodeGuru && l.kodeGuru.toLowerCase() === sched.kodeGuru.toLowerCase()) return true;
+        return false;
       });
 
       if (!matchedLog) {
@@ -317,7 +340,9 @@ export default function App() {
         } else if (
           matchedLog.statusKehadiran === 'Izin' || 
           matchedLog.statusKehadiran === 'Sakit' || 
-          matchedLog.statusKehadiran === 'Dinas Luar'
+          matchedLog.statusKehadiran === 'Dinas Luar' ||
+          matchedLog.statusKehadiran === 'Keperluan Pribadi' ||
+          matchedLog.statusKehadiran === 'Instruksi Pimpinan'
         ) {
           permitCount++;
           emptyCount++; // Perlu infal
@@ -344,12 +369,45 @@ export default function App() {
     };
   }, [classes, schedules, attendanceLogs, dayNameIndo, activePeriodNumber, selectedDate]);
 
-  // Available unique dates in the dataset + fallback
+  // Daftar tanggal KBM bulan berjalan yang dapat dipilih
   const availableDates = useMemo(() => {
-    const set = new Set(attendanceLogs.map(r => r.tanggal));
-    if (!set.has('09-Okt-2026')) set.add('09-Okt-2026'); // Jumat
-    return Array.from(set);
-  }, [attendanceLogs]);
+    const datesMap = new Map<string, string>(); // canonicalKey -> displayDate
+
+    // 1. Masukkan semua tanggal dari data attendanceLogs
+    attendanceLogs.forEach(l => {
+      if (l.tanggal) {
+        const disp = formatToIndonesianDisplayDate(l.tanggal);
+        const key = canonicalDateKey(disp);
+        if (key && !datesMap.has(key)) {
+          datesMap.set(key, disp);
+        }
+      }
+    });
+
+    // 2. Buat seluruh hari KBM (Senin s/d Jumat) di bulan berjalan
+    const refKey = canonicalDateKey(selectedDate) || canonicalDateKey(getTodayWIBDisplayDate()) || '2026-10-16';
+    const [yearStr, monthStr] = refKey.split('-');
+    const year = parseInt(yearStr, 10) || 2026;
+    const month = parseInt(monthStr, 10) || 10;
+
+    const daysInMonth = new Date(year, month, 0).getDate();
+    for (let day = 1; day <= daysInMonth; day++) {
+      const d = new Date(year, month - 1, day);
+      const dayOfWeek = d.getDay();
+      // Hari kerja sekolah: Senin (1) s/d Jumat (5)
+      if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+        const disp = formatToIndonesianDisplayDate(d);
+        const key = canonicalDateKey(disp);
+        if (key && !datesMap.has(key)) {
+          datesMap.set(key, disp);
+        }
+      }
+    }
+
+    // Urutkan tanggal secara kronologis
+    const sortedKeys = Array.from(datesMap.keys()).sort();
+    return sortedKeys.map(k => datesMap.get(k)!);
+  }, [attendanceLogs, selectedDate]);
 
   return (
     <div className={`min-h-screen bg-slate-100/70 text-slate-900 flex flex-col font-sans ${isFullscreen ? 'p-0' : ''}`}>
@@ -417,44 +475,21 @@ export default function App() {
             )}
           </div>
 
-          {/* Sesi Jam Simulator for Testing */}
-          <div className="flex items-center gap-1.5 self-start sm:self-auto bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-200 text-xs">
-            <SlidersHorizontal className="w-3 h-3 text-slate-500" />
-            <span className="text-slate-600 text-[11px] font-medium">Simulasi Jam:</span>
-            {isWeekend ? (
-              <span className="text-[11px] text-amber-700 font-semibold px-1.5">
-                Libur Akhir Pekan
-              </span>
-            ) : (
-              <div className="flex items-center gap-0.5">
-                {currentSchedules.map(s => (
-                  <button
-                    key={s.period}
-                    onClick={() => {
-                      setIsSimulatingPeriod(true);
-                      setSimulatedPeriod(s.period);
-                    }}
-                    className={`w-5 h-5 rounded text-[11px] font-mono font-bold transition-colors cursor-pointer ${
-                      activePeriodNumber === s.period
-                        ? 'bg-slate-900 text-white shadow-2xs'
-                        : 'text-slate-600 hover:bg-slate-200'
-                    }`}
-                    title={`Lihat status saat ${s.label} (${s.startTime} - ${s.endTime})`}
-                  >
-                    {s.period}
-                  </button>
-                ))}
-              </div>
-            )}
-            {isSimulatingPeriod && !isWeekend && (
-              <button
-                onClick={() => setIsSimulatingPeriod(false)}
-                className="text-[10px] text-indigo-600 hover:underline font-semibold ml-1 cursor-pointer"
-                title="Kembali ke jam otomatis sesuai waktu WIB nyata"
-              >
-                Otomatis
-              </button>
-            )}
+          {/* Status Sesi Jam KBM Real-time (Simulasi Jam Ditiadakan) */}
+          <div className="flex items-center gap-2 self-start sm:self-auto bg-slate-50 px-3 py-1 rounded-lg border border-slate-200 text-xs font-medium text-slate-700">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span className="text-slate-500 text-[11px]">Sesi KBM:</span>
+            <span className="font-semibold text-slate-900 font-mono">
+              {isWeekend 
+                ? 'Akhir Pekan (Libur)' 
+                : activePeriodScheduleInfo 
+                  ? `${activePeriodScheduleInfo.label} (${activePeriodScheduleInfo.startTime} - ${activePeriodScheduleInfo.endTime})` 
+                  : `Jam Ke-${activePeriodNumber}`
+              }
+            </span>
           </div>
         </div>
 
@@ -575,13 +610,24 @@ export default function App() {
         )}
       </main>
 
-      {/* 5. Read-Only Relational Detail Modal */}
+      {/* 5. Pop-up Awal Pengisian Link Backend ketika belum terekam */}
+      <InitialSetupModal
+        isOpen={isInitialSetupOpen}
+        onClose={() => setIsInitialSetupOpen(false)}
+        onSaveUrl={(newUrl) => {
+          handleUrlUpdated(newUrl);
+          setIsInitialSetupOpen(false);
+        }}
+        onUseSampleData={() => setIsInitialSetupOpen(false)}
+      />
+
+      {/* 6. Read-Only Relational Detail Modal */}
       <DetailModal
         slot={selectedSlot}
         onClose={() => setSelectedSlot(null)}
       />
 
-      {/* 6. Admin / Pengawas PIN-Protected Apps Script URL Configuration Modal */}
+      {/* 7. Admin / Pengawas PIN-Protected Apps Script URL Configuration Modal */}
       <AdminUrlModal
         isOpen={isAdminModalOpen}
         onClose={() => setIsAdminModalOpen(false)}

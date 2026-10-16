@@ -6,7 +6,7 @@ import {
   MasterMapel, 
   ClassMaster 
 } from '../types';
-import { normalizeClassName, getDayNameIndonesian } from '../utils/appsScriptCode';
+import { normalizeClassName, getDayNameIndonesian, isSameDate } from '../utils/appsScriptCode';
 import { 
   AlertCircle, 
   CheckCircle2, 
@@ -83,7 +83,7 @@ export const UnconfirmedClassesSection: React.FC<UnconfirmedClassesSectionProps>
 
   // Log presensi hari ini
   const logsToday = React.useMemo(() => {
-    return attendanceLogs.filter(l => l.tanggal === selectedDate);
+    return attendanceLogs.filter(l => isSameDate(l.tanggal, selectedDate));
   }, [attendanceLogs, selectedDate]);
 
   // Jadwal aktif di jam ini untuk hari terpilih
@@ -106,9 +106,10 @@ export const UnconfirmedClassesSection: React.FC<UnconfirmedClassesSectionProps>
 
           // Cocokkan periode jam atau guru terjadwal
           if (log.periods && log.periods.includes(activePeriodNumber)) return true;
+          if (log.periods && sched.periods && log.periods.some(p => sched.periods.includes(p))) return true;
           if (log.mapelKe && log.mapelKe === sched.mapelKe) return true;
           if (log.startPeriod && log.endPeriod && activePeriodNumber >= log.startPeriod && activePeriodNumber <= log.endPeriod) return true;
-          if (log.kodeGuru && log.kodeGuru === sched.kodeGuru) return true;
+          if (log.kodeGuru && sched.kodeGuru && log.kodeGuru.toLowerCase() === sched.kodeGuru.toLowerCase()) return true;
           
           return false;
         });

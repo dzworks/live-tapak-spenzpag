@@ -76,16 +76,21 @@ export const TopNav: React.FC<TopNavProps> = ({
           {/* Zone 3: Live clock, Connection Indicator, TV Fullscreen Mode, Admin URL Lock & Refresh */}
           <div className="flex items-center gap-2 shrink-0">
             {/* Connection Indicator */}
-            <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border ${
-              isLiveConnected
-                ? 'bg-emerald-950/60 text-emerald-300 border-emerald-700/60'
-                : 'bg-slate-800/80 text-slate-300 border-slate-700/60'
-            }`}>
-              <Wifi className={`w-3 h-3 ${isLiveConnected ? 'text-emerald-400' : 'text-slate-400'}`} />
+            <button
+              type="button"
+              onClick={onOpenAdminModal}
+              title={isLiveConnected ? "Database Google Spreadsheet Terhubung (Klik untuk Kelola)" : "Belum Terhubung ke Spreadsheet (Klik untuk Konfigurasi)"}
+              className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                isLiveConnected
+                  ? 'bg-emerald-950/60 text-emerald-300 border-emerald-700/60 hover:bg-emerald-900/60'
+                  : 'bg-amber-950/60 text-amber-300 border-amber-700/60 hover:bg-amber-900/60'
+              }`}
+            >
+              <Wifi className={`w-3 h-3 ${isLiveConnected ? 'text-emerald-400' : 'text-amber-400'}`} />
               <span className="text-[11px] font-mono">
-                {isLiveConnected ? 'Sheets Terhubung' : 'Data Lokal (Aktif)'}
+                {isLiveConnected ? 'Sheets Terhubung' : 'Belum Terhubung (Klik)'}
               </span>
-            </div>
+            </button>
 
             {/* Live Clock WIB */}
             <div className="hidden lg:flex items-center gap-1.5 text-xs font-mono text-slate-300 bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-700/60 tabular-nums">
