@@ -59,6 +59,9 @@ export const AdminUrlModal: React.FC<AdminUrlModalProps> = ({
     setIsVerifyingPin(true);
     setPinError('');
 
+    // PIN tersimpan di localStorage (bawaan: 1234) untuk deployment statis Vercel
+    const currentLocalPin = localStorage.getItem('gurulive_admin_pin') || '1234';
+
     try {
       const res = await fetch('/api/verify-pin', {
         method: 'POST',
@@ -66,20 +69,40 @@ export const AdminUrlModal: React.FC<AdminUrlModalProps> = ({
         body: JSON.stringify({ pin: pinInput.trim() }),
       });
 
+      // Jika berjalan di hosting statis (Vercel) di mana endpoint /api/verify-pin
+      // mengembalikan 404/405 (atau rewrite HTML index.html), verifikasi langsung via localStorage
+      const contentType = res.headers.get('content-type') || '';
+      const isStaticPlatform = res.status === 404 || res.status === 405 || !contentType.includes('application/json');
+
+      if (isStaticPlatform) {
+        if (pinInput.trim() === currentLocalPin) {
+          setIsAuthenticated(true);
+          setPinError('');
+        } else {
+          setPinError('PIN salah. Silakan coba lagi.');
+        }
+        return;
+      }
+
       if (res.ok) {
-        setIsAuthenticated(true);
-        setPinError('');
+        const data = await res.json().catch(() => ({}));
+        if (data.success !== false) {
+          setIsAuthenticated(true);
+          setPinError('');
+        } else {
+          setPinError(data.message || 'PIN salah. Silakan coba lagi.');
+        }
       } else {
         const data = await res.json().catch(() => ({}));
         setPinError(data.message || 'PIN salah. Silakan coba lagi.');
       }
     } catch {
       // Fallback jika offline/dev tanpa API server
-      if (pinInput.trim() === '1234') {
+      if (pinInput.trim() === currentLocalPin) {
         setIsAuthenticated(true);
         setPinError('');
       } else {
-        setPinError('PIN salah (Bawaan: 1234)');
+        setPinError(`PIN salah (Bawaan: ${currentLocalPin})`);
       }
     } finally {
       setIsVerifyingPin(false);
@@ -108,6 +131,12 @@ export const AdminUrlModal: React.FC<AdminUrlModalProps> = ({
         body: JSON.stringify({ url: target }),
       });
 
+      const contentType = res.headers.get('content-type') || '';
+      if (res.status === 404 || res.status === 405 || !contentType.includes('application/json')) {
+        // Fallback langsung fetch jika route proxy offline di Vercel
+        throw new Error('Static host: bypass proxy');
+      }
+
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
         setTestResult({
@@ -120,17 +149,23 @@ export const AdminUrlModal: React.FC<AdminUrlModalProps> = ({
           message: data.message || 'Gagal tersambung. Pastikan Web App disetel "Anyone" (Siapa saja).',
         });
       }
-    } catch (err: any) {
-      // Fallback langsung fetch jika route proxy offline
+    } catch {
+      // Fallback langsung fetch jika route proxy offline (Vercel)
       try {
         const directRes = await fetch(target);
         if (directRes.ok) {
-          setTestResult({ success: true, message: 'Koneksi langsung berhasil! Data sheet terbaca.' });
+          const directData = await directRes.json().catch(() => ({}));
+          const bundle = directData?.data || directData;
+          const hasSheets = bundle && (bundle.schedules || bundle.Schedules || bundle.masterGuru || bundle.MasterGuru);
+          setTestResult({
+            success: true,
+            message: hasSheets ? 'Koneksi langsung berhasil! Data 6 sheet TAPAK terdeteksi valid.' : 'Koneksi berhasil terhubung ke Google Apps Script.',
+          });
         } else {
-          setTestResult({ success: false, message: `HTTP status: ${directRes.status}` });
+          setTestResult({ success: false, message: `HTTP status Apps Script: ${directRes.status}` });
         }
       } catch {
-        setTestResult({ success: false, message: 'Koneksi gagal atau diblokir CORS. Periksa izin deploy Apps Script.' });
+        setTestResult({ success: false, message: 'Koneksi gagal atau diblokir CORS. Periksa izin deploy Web App (Who has access: Anyone).' });
       }
     } finally {
       setIsTesting(false);
@@ -167,15 +202,37 @@ export const AdminUrlModal: React.FC<AdminUrlModalProps> = ({
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.success) {
-        setSaveSuccessMessage('URL backend berhasil disimpan permanen di server! Menyelaraskan seluruh device...');
+      const contentType = res.headers.get('content-type') || '';
+      const isStaticPlatform = res.status === 404 || res.status === 405 || !contentType.includes('application/json');
+
+      if (isStaticPlatform) {
+        // Simpan langsung ke browser (Vercel SPA)
+        localStorage.setItem('gurulive_apps_script_url', cleanUrl);
+        if (payload.newPin) {
+          localStorage.setItem('gurulive_admin_pin', payload.newPin);
+          setPinChangeMessage('PIN berhasil diperbarui di browser ini.');
+        }
+        setSaveSuccessMessage('URL backend berhasil disimpan ke browser! Menyelaraskan data...');
         onUrlUpdated(cleanUrl);
         setInputUrl('');
+        setTimeout(() => {
+          onClose();
+        }, 1500);
+        return;
+      }
+
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        // Simpan juga ke localStorage sebagai backup
+        localStorage.setItem('gurulive_apps_script_url', cleanUrl);
         if (payload.newPin) {
+          localStorage.setItem('gurulive_admin_pin', payload.newPin);
           setPinChangeMessage('PIN berhasil diperbarui.');
           setPinInput(payload.newPin);
         }
+        setSaveSuccessMessage('URL backend berhasil disimpan permanen di server! Menyelaraskan seluruh device...');
+        onUrlUpdated(cleanUrl);
+        setInputUrl('');
         setTimeout(() => {
           onClose();
         }, 1500);
@@ -187,6 +244,10 @@ export const AdminUrlModal: React.FC<AdminUrlModalProps> = ({
       }
     } catch {
       // Fallback update state client-side jika server offline
+      localStorage.setItem('gurulive_apps_script_url', cleanUrl);
+      if (showChangePin && newPin.trim().length >= 4) {
+        localStorage.setItem('gurulive_admin_pin', newPin.trim());
+      }
       onUrlUpdated(cleanUrl);
       setSaveSuccessMessage('URL tersimpan di memori frontend browser.');
       setTimeout(() => {

@@ -247,7 +247,8 @@ export default function App() {
     const loadServerConfig = async () => {
       try {
         const res = await fetch('/api/config');
-        if (res.ok) {
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
           const data = await res.json();
           if (isMounted && data.success && data.scriptUrl) {
             setAppsScriptUrl(data.scriptUrl);
@@ -257,7 +258,7 @@ export default function App() {
           }
         }
       } catch {
-        // Mode offline/dev tanpa API server
+        // Mode offline/dev tanpa API server (atau deployment statis Vercel)
       }
       if (isMounted && appsScriptUrl) {
         fetchFromAppsScript(appsScriptUrl);
