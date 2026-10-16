@@ -10,6 +10,7 @@ export const CONFIG = {
   AUTO_REFRESH_INTERVAL: 60,
 
   // Nama Sekolah & Branding
-  APP_NAME: 'GuruLive Monitor',
-  SCHOOL_NAME: 'Monitoring Presensi KBM 23 Kelas',
+  APP_NAME: 'TAPAK Live Monitor',
+  SCHOOL_NAME: 'Versi 3.5.2',
+  VERSION: 'Versi 3.5.2',
 };

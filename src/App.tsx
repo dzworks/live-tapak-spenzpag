@@ -92,6 +92,7 @@ export default function App() {
     return today || '16-Okt-2026';
   });
   const [activeFilter, setActiveFilter] = useState<string>('all');
+  const [selectedGrade, setSelectedGrade] = useState<'all' | 'VII' | 'VIII' | 'IX'>('all');
   const [isUltraCompact, setIsUltraCompact] = useState<boolean>(true);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [isUnconfirmedExpanded, setIsUnconfirmedExpanded] = useState<boolean>(true);
@@ -616,6 +617,8 @@ export default function App() {
           isExpanded={isUnconfirmedExpanded}
           onToggleExpand={() => setIsUnconfirmedExpanded(prev => !prev)}
           onSelectClass={handleSelectUnconfirmedClass}
+          selectedGrade={selectedGrade}
+          onSelectGrade={setSelectedGrade}
         />
 
         {/* 5. Tab Views (Read-Only) */}
@@ -635,6 +638,8 @@ export default function App() {
             onSelectDateFallback={setSelectedDate}
             highlightedClassName={highlightedClassName}
             recentlyUpdatedClasses={recentlyUpdatedClasses}
+            selectedGrade={selectedGrade}
+            onSelectGrade={setSelectedGrade}
           />
         )}
 

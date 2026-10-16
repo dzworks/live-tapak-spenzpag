@@ -471,3 +471,38 @@ export function getCurrentPeriodInfo(schedules: PeriodSchedule[] = PERIOD_SCHEDU
 export function processAndDeduplicateAttendance(records: any[]): AttendanceLogItem[] {
   return records.map(enrichAttendanceLogItem);
 }
+
+/**
+ * Deteksi entitas sampel / contoh (guru contoh, mapel contoh, ruang/kelas contoh)
+ * Digunakan untuk mengecualikan data uji coba dari kalkulasi statistik & infografis
+ */
+export function isSampleEntity(params: {
+  kodeGuru?: string | null;
+  namaGuru?: string | null;
+  kodeMapel?: string | null;
+  namaMapel?: string | null;
+  namaKelas?: string | null;
+  lokasiRuang?: string | null;
+}): boolean {
+  const checkText = (txt?: string | null): boolean => {
+    if (!txt) return false;
+    const lower = String(txt).toLowerCase().trim();
+    return (
+      lower.includes('contoh') ||
+      lower.includes('dummy') ||
+      lower.includes('sample') ||
+      lower.includes('test') ||
+      lower === 'ct'
+    );
+  };
+
+  return (
+    checkText(params.kodeGuru) ||
+    checkText(params.namaGuru) ||
+    checkText(params.kodeMapel) ||
+    checkText(params.namaMapel) ||
+    checkText(params.namaKelas) ||
+    checkText(params.lokasiRuang)
+  );
+}
+

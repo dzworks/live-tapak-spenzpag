@@ -12,7 +12,9 @@ import {
   Play
 } from 'lucide-react';
 import { ScheduleItem, AttendanceLogItem, MasterGuru, ClassMaster } from '../types';
-import { normalizeClassName, isSameDate } from '../utils/appsScriptCode';
+import { normalizeClassName, isSameDate, isSampleEntity } from '../utils/appsScriptCode';
+import { getScheduleForDate } from '../data/initialData';
+import { TeacherStatusDetailModal, TeacherStatusTab } from './TeacherStatusDetailModal';
 
 interface ExecutiveInfographicProps {
   schedules: ScheduleItem[];
@@ -55,6 +57,15 @@ export const ExecutiveInfographic: React.FC<ExecutiveInfographicProps> = ({
   const [isPausedScroll, setIsPausedScroll] = useState<boolean>(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // State Pop-up Modal Detail Status Guru
+  const [isTeacherModalOpen, setIsTeacherModalOpen] = useState<boolean>(false);
+  const [teacherModalTab, setTeacherModalTab] = useState<TeacherStatusTab>('izin');
+
+  const openTeacherModal = (tab: TeacherStatusTab) => {
+    setTeacherModalTab(tab);
+    setIsTeacherModalOpen(true);
+  };
+
   // Kamus nama lengkap guru
   const teachersMap = useMemo(() => {
     const map: Record<string, MasterGuru> = {};
@@ -64,13 +75,31 @@ export const ExecutiveInfographic: React.FC<ExecutiveInfographicProps> = ({
     return map;
   }, [masterGuru]);
 
-  // 1. DATA KBM HARI INI
+  // 1. DATA KBM HARI INI (Mengabaikan guru contoh, mapel contoh, dan kelas/ruang contoh)
   const schedulesToday = useMemo(() => {
-    return schedules.filter(s => s.hari.toLowerCase() === dayNameIndo.toLowerCase());
-  }, [schedules, dayNameIndo]);
+    return schedules.filter(s => {
+      if (s.hari.toLowerCase() !== dayNameIndo.toLowerCase()) return false;
+      const tObj = teachersMap[s.kodeGuru];
+      return !isSampleEntity({
+        kodeGuru: s.kodeGuru,
+        namaGuru: tObj?.namaLengkap,
+        kodeMapel: s.kodeMapel,
+        namaKelas: s.namaKelas,
+      });
+    });
+  }, [schedules, dayNameIndo, teachersMap]);
 
   const logsToday = useMemo(() => {
-    return attendanceLogs.filter(l => isSameDate(l.tanggal, selectedDate));
+    return attendanceLogs.filter(l => {
+      if (!isSameDate(l.tanggal, selectedDate)) return false;
+      return !isSampleEntity({
+        kodeGuru: l.kodeGuru,
+        namaGuru: l.namaGuru,
+        namaMapel: l.mataPelajaran,
+        namaKelas: l.kelas,
+        lokasiRuang: l.ruangBelajar,
+      });
+    });
   }, [attendanceLogs, selectedDate]);
 
   // Sesi Aktif Saat Ini
@@ -80,12 +109,49 @@ export const ExecutiveInfographic: React.FC<ExecutiveInfographicProps> = ({
 
   const activeSessionsCount = activeSchedules.length;
 
-  // Analisis Sesi Aktif
-  const activeSessionsAnalysis = useMemo(() => {
-    let adaGuru = 0;
-    let belumKonfirmasi = 0;
+  // Cek apakah waktu saat ini sudah setelah jam pelajaran sekolah berakhir (After School / Pulang Sekolah)
+  const isAfterSchool = useMemo(() => {
+    // 1. Cek dari activePeriodNumber vs maxPeriod di jadwal hari ini
+    const maxPeriodInToday = schedulesToday.length > 0 
+      ? schedulesToday.reduce((max, s) => Math.max(max, s.endPeriod), 1)
+      : 8;
+    if (activePeriodNumber > maxPeriodInToday) return true;
 
-    activeSchedules.forEach(sched => {
+    // 2. Cek jam WIB real-time vs jam selesai jadwal pelajaran hari ini (misal Jumat jam ke-5 selesai 10:45)
+    if (wibTimeStr && selectedDate) {
+      const daySchedules = getScheduleForDate(selectedDate);
+      if (daySchedules && daySchedules.length > 0) {
+        const lastPeriod = daySchedules[daySchedules.length - 1];
+        if (lastPeriod && lastPeriod.endTime) {
+          const [endH, endM] = lastPeriod.endTime.split(':').map(Number);
+          const lastPeriodEndMinutes = endH * 60 + endM;
+
+          const cleanTime = wibTimeStr.replace(/[^\d:]/g, '').trim();
+          if (cleanTime.includes(':')) {
+            const [curH, curM] = cleanTime.split(':').map(Number);
+            const currentWibMinutes = curH * 60 + curM;
+            if (currentWibMinutes > lastPeriodEndMinutes) {
+              return true;
+            }
+          }
+        }
+      }
+    }
+
+    return false;
+  }, [schedulesToday, activePeriodNumber, wibTimeStr, selectedDate]);
+
+  // Analisis Sesi KBM Hari Ini (Kumulatif: Sesi Berjalan & Terlewat yang startPeriod <= activePeriodNumber, atau seluruh sesi jika isAfterSchool)
+  const todaySessionsAnalysis = useMemo(() => {
+    const cumulativeSchedules = isAfterSchool 
+      ? schedulesToday 
+      : schedulesToday.filter(s => s.startPeriod <= activePeriodNumber);
+    const totalCumulativeCount = cumulativeSchedules.length;
+
+    let terkonfirmasiCount = 0;
+    let belumKonfirmasiCount = 0;
+
+    cumulativeSchedules.forEach(sched => {
       const normSchedClass = normalizeClassName(sched.namaKelas);
       const matchedLog = logsToday.find(l => {
         const normLogClass = normalizeClassName(l.kelas);
@@ -98,103 +164,185 @@ export const ExecutiveInfographic: React.FC<ExecutiveInfographicProps> = ({
         return false;
       });
 
-      if (matchedLog && (matchedLog.statusKehadiran === 'Hadir' || matchedLog.pengganti === 'Y')) {
-        adaGuru++;
+      if (
+        matchedLog &&
+        (matchedLog.statusKehadiran === 'Hadir' ||
+          matchedLog.statusKehadiran === 'Sakit' ||
+          matchedLog.statusKehadiran === 'Izin' ||
+          matchedLog.statusKehadiran === 'Keperluan Pribadi' ||
+          matchedLog.statusKehadiran === 'Dinas Luar' ||
+          matchedLog.statusKehadiran === 'Instruksi Pimpinan' ||
+          matchedLog.pengganti === 'Y')
+      ) {
+        terkonfirmasiCount++;
       } else {
-        belumKonfirmasi++;
+        belumKonfirmasiCount++;
       }
     });
 
-    const percent = activeSessionsCount > 0 
-      ? Math.round((adaGuru / activeSessionsCount) * 100) 
+    const percent = totalCumulativeCount > 0 
+      ? Math.round((terkonfirmasiCount / totalCumulativeCount) * 100) 
       : 0;
 
     return {
-      adaGuru,
-      belumKonfirmasi,
+      terkonfirmasiCount,
+      belumKonfirmasiCount,
+      totalCumulativeCount,
       percent,
     };
-  }, [activeSchedules, logsToday, activePeriodNumber, activeSessionsCount]);
+  }, [schedulesToday, logsToday, activePeriodNumber, isAfterSchool]);
 
-  // 2. DATA SESI KBM KESELURUHAN HARI INI
+  // 2. DATA SESI KBM KESELURUHAN HARI INI (3 KATEGORI: BERLALU, AKTIF, AKAN DATANG)
   const totalDailySessions = schedulesToday.length;
-  const passedSessions = useMemo(() => {
-    return schedulesToday.filter(s => s.endPeriod < activePeriodNumber).length;
-  }, [schedulesToday, activePeriodNumber]);
 
-  const upcomingSessions = useMemo(() => {
-    return schedulesToday.filter(s => s.startPeriod > activePeriodNumber).length;
-  }, [schedulesToday, activePeriodNumber]);
+  const dailySessionsBreakdown = useMemo(() => {
+    // Jika waktu sudah lewat jam sekolah, seluruh sesi masuk ke kategori Berlalu (Sesi Aktif & Akan Datang = 0)
+    if (isAfterSchool) {
+      return {
+        passedCount: totalDailySessions,
+        activeTotalCount: 0,
+        activeConfirmedCount: 0,
+        upcomingCount: 0,
+      };
+    }
+
+    let passedCount = 0;
+    let upcomingCount = 0;
+    const activeSessionsList: ScheduleItem[] = [];
+
+    schedulesToday.forEach(s => {
+      if (s.endPeriod < activePeriodNumber) {
+        passedCount++;
+      } else if (s.startPeriod > activePeriodNumber) {
+        upcomingCount++;
+      } else {
+        // startPeriod <= activePeriodNumber && endPeriod >= activePeriodNumber
+        activeSessionsList.push(s);
+      }
+    });
+
+    // Hitung berapa sesi aktif yang gurunya sudah mengisi presensi
+    let activeConfirmedCount = 0;
+    activeSessionsList.forEach(sched => {
+      const normSchedClass = normalizeClassName(sched.namaKelas);
+      const matchedLog = logsToday.find(l => {
+        const normLogClass = normalizeClassName(l.kelas);
+        if (normLogClass !== normSchedClass) return false;
+        if (l.periods && l.periods.length > 0 && sched.periods && sched.periods.length > 0) {
+          if (l.periods.some(p => sched.periods.includes(p))) return true;
+        }
+        if (l.mapelKe && sched.mapelKe && Number(l.mapelKe) === Number(sched.mapelKe)) return true;
+        if (l.kodeGuru && sched.kodeGuru && l.kodeGuru.toLowerCase() === sched.kodeGuru.toLowerCase()) return true;
+        return false;
+      });
+
+      if (
+        matchedLog &&
+        (matchedLog.statusKehadiran === 'Hadir' ||
+          matchedLog.statusKehadiran === 'Sakit' ||
+          matchedLog.statusKehadiran === 'Izin' ||
+          matchedLog.statusKehadiran === 'Keperluan Pribadi' ||
+          matchedLog.statusKehadiran === 'Dinas Luar' ||
+          matchedLog.statusKehadiran === 'Instruksi Pimpinan' ||
+          matchedLog.pengganti === 'Y')
+      ) {
+        activeConfirmedCount++;
+      }
+    });
+
+    return {
+      passedCount,
+      activeTotalCount: activeSessionsList.length,
+      activeConfirmedCount,
+      upcomingCount,
+    };
+  }, [schedulesToday, logsToday, activePeriodNumber, totalDailySessions, isAfterSchool]);
 
   // Status kelancaran KBM
   const kbmStatus = useMemo(() => {
     if (isWeekend) return { text: 'Libur Akhir Pekan', color: 'text-amber-700 bg-amber-50 border-amber-200' };
-    if (activeSessionsAnalysis.belumKonfirmasi === 0 && activeSessionsCount > 0) {
+    if (todaySessionsAnalysis.belumKonfirmasiCount === 0 && todaySessionsAnalysis.totalCumulativeCount > 0) {
       return { text: 'KBM 100% Lancar', color: 'text-emerald-700 bg-emerald-50 border-emerald-200' };
     }
-    if (activeSessionsAnalysis.percent >= 80) {
+    if (todaySessionsAnalysis.percent >= 80) {
       return { text: 'KBM Sangat Lancar', color: 'text-emerald-700 bg-emerald-50 border-emerald-200' };
     }
-    if (activeSessionsAnalysis.percent >= 60) {
+    if (todaySessionsAnalysis.percent >= 60) {
       return { text: 'KBM Berjalan Baik', color: 'text-blue-700 bg-blue-50 border-blue-200' };
     }
     return { text: 'Perlu Perhatian Piket', color: 'text-rose-700 bg-rose-50 border-rose-200 animate-pulse' };
-  }, [activeSessionsAnalysis, activeSessionsCount, isWeekend]);
+  }, [todaySessionsAnalysis, isWeekend]);
 
-  // 3. STATISTIK KETERANGAN GURU TERJADWAL HARI INI (DIAGRAM PIE/DONUT)
+  // 3. STATISTIK KETERANGAN GURU HARI INI (4 KRITERIA: ADA GURU, IZIN, BELUM KONFIRMASI, NON JADWAL)
   const teacherStats = useMemo(() => {
+    // 1) Guru master aktif (eksklusi sampel)
+    const activeMasterGuru = masterGuru.filter(
+      g => !isSampleEntity({ kodeGuru: g.kodeGuru, namaGuru: g.namaLengkap })
+    );
+
+    const totalMasterTeachers = activeMasterGuru.length;
+
     // Kumpulan kode guru unik yang terjadwal mengajar hari ini
-    const scheduledGuruCodes = Array.from(new Set(schedulesToday.map(s => s.kodeGuru).filter(Boolean)));
-    const totalTeachers = scheduledGuruCodes.length;
+    const scheduledGuruCodes = new Set(
+      schedulesToday
+        .map(s => s.kodeGuru)
+        .filter(Boolean)
+        .filter(kode => {
+          const tObj = teachersMap[kode];
+          return !isSampleEntity({ kodeGuru: kode, namaGuru: tObj?.namaLengkap });
+        })
+    );
 
     let hadirCount = 0;
-    let sakitCount = 0;
-    let izinPribadiCount = 0;
-    let dinasLuarCount = 0;
-    let instruksiPimpinanCount = 0;
+    let izinCount = 0;
+    let belumKonfirmasiCount = 0;
+    let nonJadwalCount = 0;
 
-    scheduledGuruCodes.forEach(kode => {
-      // Cari catatan di logsToday untuk guru ini
-      const logs = logsToday.filter(l => l.kodeGuru === kode);
-      const leaveLog = logs.find(l => l.statusKehadiran && l.statusKehadiran !== 'Hadir');
+    activeMasterGuru.forEach(guru => {
+      const kode = guru.kodeGuru;
+      const isScheduled = scheduledGuruCodes.has(kode);
+      const guruLogs = logsToday.filter(l => l.kodeGuru === kode);
 
-      if (!leaveLog) {
-        hadirCount++;
+      // Cek perizinan / ketidakhadiran
+      const leaveLog = guruLogs.find(l => l.statusKehadiran && l.statusKehadiran !== 'Hadir');
+
+      if (leaveLog) {
+        izinCount++;
       } else {
-        const st = (leaveLog.statusKehadiran || '').toLowerCase();
-        if (st.includes('sakit')) {
-          sakitCount++;
-        } else if (st.includes('pribadi')) {
-          izinPribadiCount++;
-        } else if (st.includes('dinas')) {
-          dinasLuarCount++;
-        } else if (st.includes('instruksi') || st.includes('pimpinan')) {
-          instruksiPimpinanCount++;
+        const presentLog = guruLogs.find(l => l.statusKehadiran === 'Hadir');
+        if (presentLog) {
+          hadirCount++;
+        } else if (isScheduled) {
+          // Punya jadwal mengajar tapi belum mengabsen sekalipun
+          belumKonfirmasiCount++;
         } else {
-          izinPribadiCount++;
+          // Tidak ada jadwal mengajar hari ini
+          nonJadwalCount++;
         }
       }
     });
 
     const categories = [
       { key: 'hadir', label: 'Ada Guru', count: hadirCount, color: '#10b981', bgClass: 'bg-emerald-500' },
-      { key: 'sakit', label: 'Guru Sakit', count: sakitCount, color: '#f59e0b', bgClass: 'bg-amber-500' },
-      { key: 'pribadi', label: 'Keperluan Pribadi', count: izinPribadiCount, color: '#f43f5e', bgClass: 'bg-rose-500' },
-      { key: 'dinas', label: 'Dinas Luar', count: dinasLuarCount, color: '#0ea5e9', bgClass: 'bg-sky-500' },
-      { key: 'instruksi', label: 'Instruksi Pimpinan', count: instruksiPimpinanCount, color: '#8b5cf6', bgClass: 'bg-violet-500' },
+      { key: 'izin', label: 'Izin', count: izinCount, color: '#f59e0b', bgClass: 'bg-amber-500' },
+      { key: 'belumKonfirmasi', label: 'Belum Konfirmasi', count: belumKonfirmasiCount, color: '#e11d48', bgClass: 'bg-rose-600' },
+      { key: 'nonJadwal', label: 'Tidak ada jadwal', count: nonJadwalCount, color: '#64748b', bgClass: 'bg-slate-500' },
     ];
 
     return {
-      totalTeachers,
-      categories,
+      totalMasterTeachers,
+      scheduledCount: scheduledGuruCodes.size,
       hadirCount,
-      totalAbsent: totalTeachers - hadirCount,
+      izinCount,
+      belumKonfirmasiCount,
+      nonJadwalCount,
+      categories,
     };
-  }, [schedulesToday, logsToday]);
+  }, [masterGuru, schedulesToday, logsToday, teachersMap]);
 
-  // Perhitungan Sudut Donut Chart SVG
+  // Perhitungan Sudut Donut Chart SVG (4 Segmen)
   const donutSlices = useMemo(() => {
-    const total = teacherStats.totalTeachers || 1;
+    const total = teacherStats.totalMasterTeachers || 1;
     let cumulativePercent = 0;
     const radius = 28;
     const circumference = 2 * Math.PI * radius; // ~175.93
@@ -229,10 +377,13 @@ export const ExecutiveInfographic: React.FC<ExecutiveInfographicProps> = ({
 
     logsToday.forEach(log => {
       if (log.statusKehadiran && log.statusKehadiran !== 'Hadir') {
+        const teacherObj = teachersMap[log.kodeGuru];
+        if (isSampleEntity({ kodeGuru: log.kodeGuru, namaGuru: teacherObj?.namaLengkap || log.namaGuru })) {
+          return;
+        }
         const key = `${log.kodeGuru}_${log.statusKehadiran}`;
         if (!seenGuru.has(key)) {
           seenGuru.add(key);
-          const teacherObj = teachersMap[log.kodeGuru];
           const namaLengkap = teacherObj?.namaLengkap || log.namaGuru || log.kodeGuru || 'Guru Pengampu';
           
           let badgeColor = 'bg-slate-100 text-slate-800 border-slate-200';
@@ -358,7 +509,7 @@ export const ExecutiveInfographic: React.FC<ExecutiveInfographicProps> = ({
           {/* TATA LETAK FIT 1-LAYAR HP (2x2 grid) & RESPONSIVE DESKTOP (4 kolom) */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-2.5">
             
-            {/* KOTAK 2: SESI KBM SAAT INI */}
+            {/* KOTAK 2: SESI KBM HARI INI */}
             <div 
               onClick={() => {
                 if (onToggleUnconfirmed) {
@@ -373,22 +524,30 @@ export const ExecutiveInfographic: React.FC<ExecutiveInfographicProps> = ({
               <div className="flex items-center justify-between text-slate-500 mb-1">
                 <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1 truncate">
                   <Clock className="w-3 h-3 text-indigo-600 shrink-0" />
-                  Sesi KBM Aktif
+                  SESI KBM HARI INI
                 </span>
-                <span className="text-[10px] text-slate-400 font-mono shrink-0">Jam {activePeriodNumber}</span>
+                <span className="text-[10px] text-slate-400 font-mono shrink-0">Jam 1 - {activePeriodNumber}</span>
               </div>
 
               <div className="flex items-center justify-between gap-1.5">
                 <div className="min-w-0">
                   <div className="flex items-baseline gap-1">
                     <span className="text-xl sm:text-2xl font-black font-mono tracking-tight text-slate-900 tabular-nums">
-                      {activeSessionsAnalysis.percent}%
+                      {todaySessionsAnalysis.percent}%
                     </span>
                   </div>
-                  <div className="flex flex-col text-[10px] sm:text-[11px] text-slate-600 leading-tight mt-0.5 font-medium">
-                    <span className="text-emerald-700 font-semibold truncate">Ada Guru: {activeSessionsAnalysis.adaGuru}</span>
-                    <span className={`truncate flex items-center gap-1 ${activeSessionsAnalysis.belumKonfirmasi > 0 ? 'text-rose-600 font-bold hover:underline' : 'text-slate-400'}`}>
-                      Belum Konfirmasi: {activeSessionsAnalysis.belumKonfirmasi}
+                  <div className="flex flex-col text-[9.5px] sm:text-[10.5px] text-slate-700 leading-snug mt-1 font-medium space-y-0.5">
+                    <span className="text-emerald-800 font-semibold truncate flex items-center justify-between gap-1.5">
+                      <span>Terkonfirmasi guru:</span>
+                      <strong className="font-mono text-xs font-bold text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200 shrink-0">
+                        {todaySessionsAnalysis.terkonfirmasiCount}
+                      </strong>
+                    </span>
+                    <span className={`truncate flex items-center justify-between gap-1.5 ${todaySessionsAnalysis.belumKonfirmasiCount > 0 ? 'text-rose-800 font-bold' : 'text-slate-500'}`}>
+                      <span>Belum konfirmasi:</span>
+                      <strong className="font-mono text-xs font-bold text-rose-700 bg-rose-50 px-1 py-0.2 rounded border border-rose-200 shrink-0">
+                        {todaySessionsAnalysis.belumKonfirmasiCount}
+                      </strong>
                     </span>
                   </div>
                 </div>
@@ -410,14 +569,14 @@ export const ExecutiveInfographic: React.FC<ExecutiveInfographicProps> = ({
                       cy="18"
                       r="14"
                       className={
-                        activeSessionsAnalysis.percent >= 80 
+                        todaySessionsAnalysis.percent >= 80 
                           ? 'text-emerald-500' 
-                          : activeSessionsAnalysis.percent >= 60 
+                          : todaySessionsAnalysis.percent >= 60 
                             ? 'text-amber-500' 
                             : 'text-rose-500'
                       }
                       strokeWidth="3.5"
-                      strokeDasharray={`${(activeSessionsAnalysis.percent / 100) * 88} 88`}
+                      strokeDasharray={`${(todaySessionsAnalysis.percent / 100) * 88} 88`}
                       strokeDashoffset="0"
                       strokeLinecap="round"
                       stroke="currentColor"
@@ -425,69 +584,83 @@ export const ExecutiveInfographic: React.FC<ExecutiveInfographicProps> = ({
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center font-mono text-[9px] font-bold text-slate-700">
-                    {activeSessionsAnalysis.adaGuru}/{activeSessionsCount}
+                    {todaySessionsAnalysis.terkonfirmasiCount}/{todaySessionsAnalysis.totalCumulativeCount}
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* KOTAK 3: SESI KBM KESELURUHAN HARI INI */}
+            {/* KOTAK 3: SESI KBM KESELURUHAN HARI INI (3 SUB-KOTAK: BERLALU, AKTIF, AKAN DATANG) */}
             <div className="p-2 sm:p-2.5 rounded-xl bg-white border border-slate-200 shadow-2xs flex flex-col justify-between min-h-[98px]">
               <div className="flex items-center justify-between text-slate-500 mb-1">
                 <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1 truncate">
                   <CalendarDays className="w-3 h-3 text-blue-600 shrink-0" />
                   Sesi Harian
                 </span>
-                <span className="text-[10px] text-blue-700 font-bold bg-blue-50 px-1.5 py-0.2 rounded font-mono shrink-0">
+                <span className="text-[10px] text-blue-700 font-bold bg-blue-50 px-1.5 py-0.2 rounded font-mono shrink-0 border border-blue-200">
                   {totalDailySessions} Total
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-1.5 mt-0.5">
-                <div className="p-1 rounded-lg bg-slate-50 border border-slate-100 text-center">
-                  <span className="text-[9px] text-slate-500 block leading-none">Berlalu</span>
-                  <span className="text-sm sm:text-base font-bold font-mono text-slate-700 tabular-nums">
-                    {passedSessions}
+              {/* 3 Sub-Kotak: Kiri (Berlalu), Tengah (Sesi Aktif), Kanan (Akan Datang) */}
+              <div className="grid grid-cols-3 gap-1 mt-0.5">
+                {/* 1. Kiri: Berlalu */}
+                <div className="p-1 rounded-lg bg-slate-50 border border-slate-200 text-center flex flex-col justify-center">
+                  <span className="text-[8.5px] text-slate-500 block leading-none font-medium">Berlalu</span>
+                  <span className="text-xs sm:text-sm font-bold font-mono text-slate-800 tabular-nums mt-0.5">
+                    {dailySessionsBreakdown.passedCount}
                   </span>
                 </div>
-                <div className="p-1 rounded-lg bg-indigo-50/70 border border-indigo-100 text-center">
-                  <span className="text-[9px] text-indigo-700 block leading-none font-medium">Akan Datang</span>
-                  <span className="text-sm sm:text-base font-bold font-mono text-indigo-800 tabular-nums">
-                    {upcomingSessions}
-                  </span>
-                </div>
-              </div>
 
-              {/* Status kelancaran di HP */}
-              <div className="mt-1 flex items-center justify-between text-[10px]">
-                <span className="text-slate-500 text-[9px]">Kondisi:</span>
-                <span className={`font-semibold px-1.5 py-0.2 rounded text-[9px] border truncate ${kbmStatus.color}`}>
-                  {kbmStatus.text}
-                </span>
+                {/* 2. Tengah: Sesi Aktif (Format: Rasio Absen / Sesi Aktif) */}
+                <div className="p-1 rounded-lg bg-emerald-50 border border-emerald-200 text-center flex flex-col justify-center">
+                  <span className="text-[8.5px] text-emerald-800 block leading-none font-bold truncate">Sesi Aktif</span>
+                  <span className="text-xs sm:text-sm font-black font-mono text-emerald-700 tabular-nums mt-0.5" title="Sesi aktif yang sudah absen / Total sesi aktif saat ini">
+                    {dailySessionsBreakdown.activeTotalCount > 0
+                      ? `${dailySessionsBreakdown.activeConfirmedCount}/${dailySessionsBreakdown.activeTotalCount}`
+                      : '0'}
+                  </span>
+                </div>
+
+                {/* 3. Kanan: Akan Datang */}
+                <div className="p-1 rounded-lg bg-indigo-50/70 border border-indigo-200 text-center flex flex-col justify-center">
+                  <span className="text-[8.5px] text-indigo-700 block leading-none font-medium truncate">Akan Datang</span>
+                  <span className="text-xs sm:text-sm font-bold font-mono text-indigo-800 tabular-nums mt-0.5">
+                    {dailySessionsBreakdown.upcomingCount}
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* KOTAK 4: KETERANGAN GURU (DIAGRAM PIE/DONUT) */}
+            {/* KOTAK 4: STATUS GURU (DIAGRAM PIE/DONUT 4-KRITERIA) */}
             <div className="p-2 sm:p-2.5 rounded-xl bg-white border border-slate-200 shadow-2xs flex flex-col justify-between min-h-[98px]">
-              <div className="flex items-center justify-between text-slate-500 mb-1">
+              <div 
+                onClick={() => openTeacherModal('all')}
+                className="flex items-center justify-between text-slate-500 mb-1 cursor-pointer hover:opacity-80 transition-opacity"
+                title="Klik untuk membuka detail status guru"
+              >
                 <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1 truncate">
                   <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
-                  Status Guru ({teacherStats.totalTeachers})
+                  Status Guru ({teacherStats.totalMasterTeachers})
                 </span>
-                {teacherStats.totalAbsent > 0 ? (
-                  <span className="text-[9.5px] text-rose-700 font-bold bg-rose-50 px-1 py-0.2 rounded font-mono shrink-0">
-                    {teacherStats.totalAbsent} Izin
+                {teacherStats.izinCount > 0 ? (
+                  <span className="text-[9.5px] text-amber-800 font-bold bg-amber-50 px-1 py-0.2 rounded font-mono shrink-0 border border-amber-200">
+                    {teacherStats.izinCount} Izin
                   </span>
                 ) : (
-                  <span className="text-[9.5px] text-emerald-700 font-bold bg-emerald-50 px-1 py-0.2 rounded font-mono shrink-0">
+                  <span className="text-[9.5px] text-emerald-700 font-bold bg-emerald-50 px-1 py-0.2 rounded font-mono shrink-0 border border-emerald-200">
                     Nihil Izin
                   </span>
                 )}
               </div>
 
               <div className="flex items-center gap-2">
-                {/* Donut Chart SVG */}
-                <div className="relative w-12 h-12 sm:w-13 sm:h-13 shrink-0">
+                {/* Donut Chart SVG 4 Segmen (Klik untuk buka modal detail) */}
+                <div 
+                  onClick={() => openTeacherModal('all')}
+                  className="relative w-12 h-12 sm:w-13 sm:h-13 shrink-0 cursor-pointer hover:scale-105 transition-transform"
+                  title="Klik untuk melihat detail seluruh guru"
+                >
                   <svg className="w-full h-full -rotate-90" viewBox="0 0 76 76">
                     <circle
                       cx="38"
@@ -524,42 +697,66 @@ export const ExecutiveInfographic: React.FC<ExecutiveInfographicProps> = ({
                   </div>
                 </div>
 
-                {/* Keterangan Angka di Samping Donut */}
+                {/* 4 Baris Keterangan Ringkas (Sesuai Permintaan Spesifik User) */}
                 <div className="flex-1 grid grid-cols-1 gap-0.5 text-[9px] sm:text-[9.5px] leading-tight">
-                  <div className="flex items-center justify-between text-emerald-800">
-                    <span className="flex items-center gap-1 truncate">
+                  {/* 1. Ada Guru */}
+                  <div 
+                    onClick={() => openTeacherModal('hadir')}
+                    className="flex items-center justify-between text-emerald-900 hover:bg-emerald-50 p-0.5 rounded cursor-pointer transition-colors"
+                    title="Klik untuk detail Ada Guru"
+                  >
+                    <span className="flex items-center gap-1 truncate font-medium">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
                       Ada Guru
                     </span>
-                    <span className="font-mono font-bold">{teacherStats.hadirCount}</span>
+                    <span className="font-mono font-bold bg-emerald-100/80 px-1 py-0.2 rounded text-[9px] text-emerald-900">
+                      {teacherStats.hadirCount}
+                    </span>
                   </div>
-                  <div className="flex items-center justify-between text-amber-800">
-                    <span className="flex items-center gap-1 truncate">
+
+                  {/* 2. Izin */}
+                  <div 
+                    onClick={() => openTeacherModal('izin')}
+                    className="flex items-center justify-between text-amber-900 hover:bg-amber-50 p-0.5 rounded cursor-pointer transition-colors"
+                    title="Klik untuk detail Izin (Sakit, Pribadi, Dinas, Instruksi)"
+                  >
+                    <span className="flex items-center gap-1 truncate font-medium">
                       <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
-                      Sakit
+                      Izin (Sakit/Dinas)
                     </span>
-                    <span className="font-mono font-bold">{teacherStats.categories.find(c => c.key === 'sakit')?.count || 0}</span>
+                    <span className="font-mono font-bold bg-amber-100/80 px-1 py-0.2 rounded text-[9px] text-amber-900">
+                      {teacherStats.izinCount}
+                    </span>
                   </div>
-                  <div className="flex items-center justify-between text-rose-800">
-                    <span className="flex items-center gap-1 truncate">
-                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"></span>
-                      Pribadi
+
+                  {/* 3. Belum Konfirmasi */}
+                  <div 
+                    onClick={() => openTeacherModal('belumKonfirmasi')}
+                    className="flex items-center justify-between text-rose-900 hover:bg-rose-50 p-0.5 rounded cursor-pointer transition-colors"
+                    title="Klik untuk detail Guru Belum Konfirmasi"
+                  >
+                    <span className="flex items-center gap-1 truncate font-medium">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-600 shrink-0"></span>
+                      Belum Konfirmasi
                     </span>
-                    <span className="font-mono font-bold">{teacherStats.categories.find(c => c.key === 'pribadi')?.count || 0}</span>
+                    <span className="font-mono font-bold bg-rose-100/80 px-1 py-0.2 rounded text-[9px] text-rose-900">
+                      {teacherStats.belumKonfirmasiCount}
+                    </span>
                   </div>
-                  <div className="flex items-center justify-between text-sky-800">
-                    <span className="flex items-center gap-1 truncate">
-                      <span className="w-1.5 h-1.5 rounded-full bg-sky-500 shrink-0"></span>
-                      Dinas Luar
+
+                  {/* 4. Tidak ada jadwal */}
+                  <div 
+                    onClick={() => openTeacherModal('nonJadwal')}
+                    className="flex items-center justify-between text-slate-700 hover:bg-slate-100 p-0.5 rounded cursor-pointer transition-colors"
+                    title="Klik untuk detail Guru Non-Jadwal"
+                  >
+                    <span className="flex items-center gap-1 truncate font-medium">
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-500 shrink-0"></span>
+                      Tidak ada jadwal
                     </span>
-                    <span className="font-mono font-bold">{teacherStats.categories.find(c => c.key === 'dinas')?.count || 0}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-violet-800">
-                    <span className="flex items-center gap-1 truncate">
-                      <span className="w-1.5 h-1.5 rounded-full bg-violet-500 shrink-0"></span>
-                      Instruksi
+                    <span className="font-mono font-bold bg-slate-100 px-1 py-0.2 rounded text-[9px] text-slate-800">
+                      {teacherStats.nonJadwalCount}
                     </span>
-                    <span className="font-mono font-bold">{teacherStats.categories.find(c => c.key === 'instruksi')?.count || 0}</span>
                   </div>
                 </div>
               </div>
@@ -630,6 +827,17 @@ export const ExecutiveInfographic: React.FC<ExecutiveInfographicProps> = ({
           </div>
         </div>
       )}
+
+      {/* Pop-up Modal Detail Status Guru */}
+      <TeacherStatusDetailModal
+        isOpen={isTeacherModalOpen}
+        onClose={() => setIsTeacherModalOpen(false)}
+        initialTab={teacherModalTab}
+        masterGuru={masterGuru}
+        schedulesToday={schedulesToday}
+        logsToday={logsToday}
+        selectedDate={selectedDate}
+      />
     </div>
   );
 };

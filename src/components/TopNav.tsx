@@ -34,14 +34,14 @@ export const TopNav: React.FC<TopNavProps> = ({
           {/* Zone 1: Single text element wordmark with school identity */}
           <div className="flex items-center gap-2.5 shrink-0">
             <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white font-bold text-base shadow-xs">
-              G
+              T
             </div>
             <div className="leading-tight">
               <span className="text-sm font-bold tracking-tight text-white whitespace-nowrap block">
-                GuruLive Monitor
+                TAPAK Live Monitor
               </span>
-              <span className="text-[10px] text-slate-400 font-normal block font-mono">
-                Monitoring 23 Rombel
+              <span className="text-[10px] text-emerald-400 font-medium block font-mono">
+                Versi 3.5.2
               </span>
             </div>
           </div>

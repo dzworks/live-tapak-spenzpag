@@ -24,6 +24,7 @@ export interface UnconfirmedClassItem {
   namaGuru: string;
   ruang: string;
   period: number;
+  jamKeDisplay?: string;
 }
 
 interface UnconfirmedClassesSectionProps {
@@ -37,6 +38,29 @@ interface UnconfirmedClassesSectionProps {
   isExpanded: boolean;
   onToggleExpand: () => void;
   onSelectClass: (className: string) => void;
+  selectedGrade?: 'all' | 'VII' | 'VIII' | 'IX';
+  onSelectGrade?: (grade: 'all' | 'VII' | 'VIII' | 'IX') => void;
+}
+
+export function getGradeFromClassName(className: string): 'VII' | 'VIII' | 'IX' | 'other' {
+  if (!className) return 'other';
+  const upper = className.toUpperCase().replace(/^KELAS\s+/i, '').trim();
+  const norm = normalizeClassName(className).toUpperCase();
+
+  // 1. Cek VIII (Tingkat 8) terlebih dahulu agar string 'VIII' tidak terdeteksi sebagai 'VII'
+  if (upper.startsWith('VIII') || norm.includes('VIII') || norm.includes('KLS-08') || norm.includes('KLS-8') || norm.includes('08')) {
+    return 'VIII';
+  }
+  // 2. Cek VII (Tingkat 7)
+  if (upper.startsWith('VII') || norm.includes('VII') || norm.includes('KLS-07') || norm.includes('KLS-7') || norm.includes('07')) {
+    return 'VII';
+  }
+  // 3. Cek IX (Tingkat 9)
+  if (upper.startsWith('IX') || norm.includes('IX') || norm.includes('KLS-09') || norm.includes('KLS-9') || norm.includes('09')) {
+    return 'IX';
+  }
+
+  return 'other';
 }
 
 export const UnconfirmedClassesSection: React.FC<UnconfirmedClassesSectionProps> = ({
@@ -50,6 +74,8 @@ export const UnconfirmedClassesSection: React.FC<UnconfirmedClassesSectionProps>
   isExpanded,
   onToggleExpand,
   onSelectClass,
+  selectedGrade = 'all',
+  onSelectGrade,
 }) => {
   const dayNameIndo = React.useMemo(() => getDayNameIndonesian(selectedDate), [selectedDate]);
 
@@ -86,62 +112,85 @@ export const UnconfirmedClassesSection: React.FC<UnconfirmedClassesSectionProps>
     return attendanceLogs.filter(l => isSameDate(l.tanggal, selectedDate));
   }, [attendanceLogs, selectedDate]);
 
-  // Jadwal aktif di jam ini untuk hari terpilih
-  const unconfirmedClasses = React.useMemo(() => {
-    const activeSchedules = schedules.filter(s => 
-      s.hari.toLowerCase() === dayNameIndo.toLowerCase() && 
-      s.periods.includes(activePeriodNumber)
-    );
+  // Evaluasi apakah waktu WIB saat ini sudah melewati jam selesai KBM (14:00 WIB)
+  const isAfterSchool = React.useMemo(() => {
+    const now = new Date();
+    const utcHours = now.getUTCHours();
+    const utcMinutes = now.getUTCMinutes();
+    const wibHours = (utcHours + 7) % 24;
+    const currentMinutesTotal = wibHours * 60 + utcMinutes;
+    return currentMinutesTotal >= 14 * 60; // Pukul 14:00 WIB ke atas
+  }, []);
 
-    const items: UnconfirmedClassItem[] = [];
+  // Jadwal aktif & belum terkonfirmasi untuk hari terpilih (Dedup 1 Kartu per Sesi Mengajar Multi-Period)
+  const { activeUnconfirmed, passedUnconfirmed } = React.useMemo(() => {
+    const activeItems: UnconfirmedClassItem[] = [];
+    const passedItems: UnconfirmedClassItem[] = [];
 
-    if (activeSchedules.length > 0) {
-      activeSchedules.forEach(sched => {
+    const daySchedules = schedules.filter(s => s.hari.toLowerCase() === dayNameIndo.toLowerCase());
+
+    if (daySchedules.length > 0) {
+      daySchedules.forEach(sched => {
         const normSchedClass = normalizeClassName(sched.namaKelas);
-        
-        // Cek apakah sudah ada catatan presensi untuk kelas ini di jam aktif
+        const teacher = teachersMap[sched.kodeGuru];
+        const subject = subjectsMap[sched.kodeMapel];
+        const classMaster = classesMap[sched.namaKelas] || classesMap[normSchedClass];
+
+        // Cek apakah sudah ada catatan presensi untuk sesi mengajar ini
         const hasAttendance = logsToday.some(log => {
           const normLogClass = normalizeClassName(log.kelas);
           if (normLogClass !== normSchedClass) return false;
 
-          // Cocokkan periode jam atau guru terjadwal
-          if (log.periods && log.periods.includes(activePeriodNumber)) return true;
+          // Cocokkan jika log presensi dinaungi oleh jadwal ini (jam/mapel/guru)
           if (log.periods && sched.periods && log.periods.some(p => sched.periods.includes(p))) return true;
-          if (log.mapelKe && log.mapelKe === sched.mapelKe) return true;
-          if (log.startPeriod && log.endPeriod && activePeriodNumber >= log.startPeriod && activePeriodNumber <= log.endPeriod) return true;
+          if (log.mapelKe && sched.mapelKe && Number(log.mapelKe) === Number(sched.mapelKe)) return true;
+          if (log.startPeriod && log.endPeriod && sched.periods.some(p => p >= log.startPeriod! && p <= log.endPeriod!)) return true;
           if (log.kodeGuru && sched.kodeGuru && log.kodeGuru.toLowerCase() === sched.kodeGuru.toLowerCase()) return true;
-          
+
           return false;
         });
 
-        // Jika belum ada presensi, masukkan ke daftar belum terkonfirmasi
+        // HANYA jika guru/kelas ini BELUM mengisi presensi (data absen tidak ada di AttendanceLogs)
         if (!hasAttendance) {
-          const teacher = teachersMap[sched.kodeGuru];
-          const subject = subjectsMap[sched.kodeMapel];
-          const classMaster = classesMap[sched.namaKelas] || classesMap[normSchedClass];
-
-          items.push({
-            id: `unconf-${sched.namaKelas}-${sched.kodeGuru}-${activePeriodNumber}`,
+          const item: UnconfirmedClassItem = {
+            id: `unconf-${sched.namaKelas}-${sched.kodeGuru}-${sched.jamKe}`,
             namaKelas: sched.namaKelas,
             kodeMapel: sched.kodeMapel || '-',
             namaMapel: subject?.namaMapel || sched.kodeMapel || 'Mata Pelajaran',
             kodeGuru: sched.kodeGuru,
             namaGuru: teacher?.namaLengkap || sched.kodeGuru,
             ruang: classMaster?.lokasiRuang || `R. ${sched.namaKelas}`,
-            period: activePeriodNumber,
-          });
+            period: sched.startPeriod,
+            jamKeDisplay: `Jam ${sched.jamKe}`,
+          };
+
+          // KATEGORISASI:
+          // 1. Jika waktu sudah > 14:00 WIB (isAfterSchool), SEMUA kelas belum terkonfirmasi masuk ke 'passedUnconfirmed'
+          if (isAfterSchool) {
+            if (!passedItems.some(i => i.id === item.id)) {
+              passedItems.push(item);
+            }
+          } else {
+            // 2. Jika waktu KBM aktif:
+            if (sched.periods.includes(activePeriodNumber)) {
+              if (!activeItems.some(i => i.id === item.id)) {
+                activeItems.push(item); // Jam Mengajar Berjalan (1 Kartu Tunggal)
+              }
+            } else if (sched.endPeriod < activePeriodNumber) {
+              if (!passedItems.some(i => i.id === item.id)) {
+                passedItems.push(item); // Jam Mengajar Terlewat
+              }
+            }
+          }
         }
       });
     } else {
-      // Fallback jika database jadwal belum terisi untuk hari ini
+      // Fallback
       classes.forEach(cls => {
         const normClass = normalizeClassName(cls.namaKelas);
-        const hasLog = logsToday.some(l => 
-          normalizeClassName(l.kelas) === normClass && 
-          (l.periods ? l.periods.includes(activePeriodNumber) : true)
-        );
+        const hasLog = logsToday.some(l => normalizeClassName(l.kelas) === normClass);
         if (!hasLog) {
-          items.push({
+          const fallbackItem: UnconfirmedClassItem = {
             id: `unconf-${cls.namaKelas}-fallback`,
             namaKelas: cls.namaKelas,
             kodeMapel: '-',
@@ -150,16 +199,74 @@ export const UnconfirmedClassesSection: React.FC<UnconfirmedClassesSectionProps>
             namaGuru: 'Belum Terjadwal',
             ruang: cls.lokasiRuang,
             period: activePeriodNumber,
-          });
+            jamKeDisplay: `Jam ${activePeriodNumber}`,
+          };
+          if (isAfterSchool) {
+            passedItems.push(fallbackItem);
+          } else {
+            activeItems.push(fallbackItem);
+          }
         }
       });
     }
 
-    // Urutkan berdasarkan nama kelas (VII-A, VII-B, dst)
-    return items.sort((a, b) => a.namaKelas.localeCompare(b.namaKelas, undefined, { numeric: true, sensitivity: 'base' }));
-  }, [schedules, dayNameIndo, activePeriodNumber, logsToday, teachersMap, subjectsMap, classesMap, classes]);
+    let filteredActive = activeItems;
+    let filteredPassed = passedItems;
 
-  const count = unconfirmedClasses.length;
+    if (selectedGrade && selectedGrade !== 'all') {
+      filteredActive = activeItems.filter(item => getGradeFromClassName(item.namaKelas) === selectedGrade);
+      filteredPassed = passedItems.filter(item => getGradeFromClassName(item.namaKelas) === selectedGrade);
+    }
+
+    const sortFn = (a: UnconfirmedClassItem, b: UnconfirmedClassItem) => 
+      a.namaKelas.localeCompare(b.namaKelas, undefined, { numeric: true, sensitivity: 'base' });
+
+    return {
+      activeUnconfirmed: filteredActive.sort(sortFn),
+      passedUnconfirmed: filteredPassed.sort(sortFn),
+    };
+  }, [schedules, dayNameIndo, activePeriodNumber, logsToday, teachersMap, subjectsMap, classesMap, classes, isAfterSchool, selectedGrade]);
+
+  const totalCount = activeUnconfirmed.length + passedUnconfirmed.length;
+
+  const renderCardGrid = (items: UnconfirmedClassItem[], isPassedGroup = false) => (
+    <div className="grid grid-cols-2 min-[420px]:grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-1 sm:gap-1.5">
+      {items.map(item => (
+        <div
+          key={item.id}
+          onClick={() => onSelectClass(item.namaKelas)}
+          title={`Klik untuk sorot kelas ${item.namaKelas} pada matriks.\nGuru: ${item.namaGuru}\nMapel: ${item.namaMapel} (${item.kodeMapel})\nJadwal: ${item.jamKeDisplay || `Jam ${item.period}`}`}
+          className={`group p-1 px-1.5 rounded-lg border cursor-pointer transition-all flex flex-col justify-between shadow-2xs ${
+            isPassedGroup 
+              ? 'bg-amber-50/60 hover:bg-amber-100/80 border-amber-200/90 hover:border-amber-400' 
+              : 'bg-white hover:bg-rose-50/80 border-rose-200/90 hover:border-indigo-400'
+          }`}
+        >
+          {/* Baris Atas: Nama Kelas, Rentang Jam, & Kode Mapel */}
+          <div className="flex items-center justify-between gap-1 leading-tight">
+            <span className={`text-[9.5px] font-bold font-mono px-1 py-0.2 rounded border truncate ${
+              isPassedGroup 
+                ? 'text-amber-800 bg-amber-100/80 border-amber-300' 
+                : 'text-rose-700 bg-rose-50 border-rose-200 group-hover:bg-indigo-50 group-hover:text-indigo-700 group-hover:border-indigo-200'
+            }`}>
+              {item.namaKelas} <span className="text-[8px] font-normal font-sans opacity-90">({item.jamKeDisplay || `Jam ${item.period}`})</span>
+            </span>
+            <span className="text-[8px] font-mono font-bold text-slate-600 bg-slate-100 px-1 py-0.2 rounded shrink-0 border border-slate-200 truncate" title={item.namaMapel}>
+              {item.kodeMapel}
+            </span>
+          </div>
+
+          {/* Baris Bawah: Nama Guru */}
+          <div className="flex items-center gap-0.5 mt-0.5 text-slate-700 group-hover:text-indigo-900 transition-colors">
+            <User className="w-2.5 h-2.5 text-slate-400 shrink-0 group-hover:text-indigo-600" />
+            <span className="text-[9px] font-medium truncate" title={item.namaGuru}>
+              {item.namaGuru}
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <div className="mb-3 rounded-2xl bg-white border border-slate-200/90 shadow-2xs overflow-hidden transition-all">
@@ -180,15 +287,15 @@ export const UnconfirmedClassesSection: React.FC<UnconfirmedClassesSectionProps>
 
           {/* Badge Jumlah Ruang Belum Terisi */}
           <span className={`px-2 py-0.2 rounded-full text-[10px] sm:text-[11px] font-mono font-bold border transition-colors ${
-            count > 0 
+            totalCount > 0 
               ? 'bg-rose-100/80 text-rose-800 border-rose-300 animate-pulse' 
               : 'bg-emerald-100 text-emerald-800 border-emerald-300'
           }`}>
-            {count > 0 ? `${count} Ruang Belum Terisi` : 'Semua Terisi (0 Ruang)'}
+            {totalCount > 0 ? `${totalCount} Ruang Belum Terisi` : 'Semua Terisi (0 Ruang)'}
           </span>
 
           <span className="text-[10px] text-slate-500 hidden sm:inline">
-            (Jam ke-{activePeriodNumber})
+            (Aktif: {activeUnconfirmed.length} · Terlewat: {passedUnconfirmed.length})
           </span>
         </div>
 
@@ -207,55 +314,51 @@ export const UnconfirmedClassesSection: React.FC<UnconfirmedClassesSectionProps>
         </div>
       </div>
 
-      {/* Konten Kotak Kelas Belum Terkonfirmasi (Micro Grid Tanpa Scroll, Seukuran Kotak Guru Izin) */}
+      {/* Konten Kotak Kelas Belum Terkonfirmasi (Dipecah 2 Bagian: Jam Berjalan & Jam Terlewat) */}
       {isExpanded && (
-        <div className="p-1.5 sm:p-2 bg-slate-50/40">
-          {count === 0 ? (
+        <div className="p-2 bg-slate-50/40 space-y-2.5">
+          {totalCount === 0 ? (
             <div className="flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
               <span className="font-medium">
-                Alhamdulillah! Seluruh kelas pada Jam ke-{activePeriodNumber} sudah terkonfirmasi hadir di presensi.
+                Alhamdulillah! Seluruh kelas pada Jam ke-{activePeriodNumber} dan jam sebelumnya telah terkonfirmasi.
               </span>
             </div>
           ) : (
             <>
-              {/* Petunjuk Aksi Singkat */}
-              <div className="flex items-center justify-between mb-1 px-1 text-[10px] text-slate-500">
-                <span>Klik kartu untuk sorot kelas di matriks KBM:</span>
-                <span className="text-[9.5px] text-slate-400 font-mono hidden sm:inline">
-                  {count} dari {classes.length} kelas belum absen
-                </span>
-              </div>
-
-              {/* Grid Mikro Tanpa Scroll: Seukuran Kotak Guru Izin, Muat Semua Kotak */}
-              <div className="grid grid-cols-2 min-[420px]:grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-1 sm:gap-1.5">
-                {unconfirmedClasses.map(item => (
-                  <div
-                    key={item.id}
-                    onClick={() => onSelectClass(item.namaKelas)}
-                    title={`Klik untuk sorot kelas ${item.namaKelas} pada matriks.\nGuru: ${item.namaGuru}\nMapel: ${item.namaMapel} (${item.kodeMapel})`}
-                    className="group p-1 px-1.5 rounded-lg bg-white hover:bg-rose-50/80 border border-rose-200/90 hover:border-indigo-400 cursor-pointer transition-all flex flex-col justify-between shadow-2xs"
-                  >
-                    {/* Baris Atas: Nama Kelas & Kode Mapel */}
-                    <div className="flex items-center justify-between gap-1 leading-tight">
-                      <span className="text-[9.5px] font-bold font-mono text-rose-700 bg-rose-50 px-1 py-0.2 rounded border border-rose-200 group-hover:bg-indigo-50 group-hover:text-indigo-700 group-hover:border-indigo-200 truncate">
-                        {item.namaKelas}
-                      </span>
-                      <span className="text-[8px] font-mono font-bold text-slate-600 bg-slate-100 px-1 py-0.2 rounded shrink-0 border border-slate-200 truncate" title={item.namaMapel}>
-                        {item.kodeMapel}
-                      </span>
-                    </div>
-
-                    {/* Baris Bawah: Nama Guru (Kompak Seukuran Baris Guru Izin) */}
-                    <div className="flex items-center gap-0.5 mt-0.5 text-slate-700 group-hover:text-indigo-900 transition-colors">
-                      <User className="w-2.5 h-2.5 text-slate-400 shrink-0 group-hover:text-indigo-600" />
-                      <span className="text-[9px] font-medium truncate" title={item.namaGuru}>
-                        {item.namaGuru}
-                      </span>
-                    </div>
+              {/* BAGIAN ATAS: KELAS BELUM TERKONFIRMASI PADA JAM MENGAJAR BERJALAN */}
+              {activeUnconfirmed.length > 0 && (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between px-1 text-[10.5px] font-bold text-rose-800">
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse"></span>
+                      <span>Jam Mengajar Berjalan (Jam Ke-{activePeriodNumber}):</span>
+                      <span className="text-[10px] font-mono text-rose-600 font-normal">({activeUnconfirmed.length} Kelas)</span>
+                    </span>
+                    <span className="text-[9.5px] text-slate-400 font-normal hidden sm:inline">
+                      Berisiran dengan Garis Waktu Sekarang
+                    </span>
                   </div>
-                ))}
-              </div>
+                  {renderCardGrid(activeUnconfirmed, false)}
+                </div>
+              )}
+
+              {/* BAGIAN BAWAH: KELAS BELUM TERKONFIRMASI PADA JAM MENGAJAR TERLEWAT */}
+              {passedUnconfirmed.length > 0 && (
+                <div className="space-y-1 pt-1 border-t border-slate-200/80">
+                  <div className="flex items-center justify-between px-1 text-[10.5px] font-bold text-amber-800">
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                      <span>Jam Mengajar Terlewat (Jam Ke-1 s/d {activePeriodNumber - 1}):</span>
+                      <span className="text-[10px] font-mono text-amber-700 font-normal">({passedUnconfirmed.length} Kelas)</span>
+                    </span>
+                    <span className="text-[9.5px] text-slate-400 font-normal hidden sm:inline">
+                      Sudah Terlampaui Garis Waktu Sesi Sebelumnya
+                    </span>
+                  </div>
+                  {renderCardGrid(passedUnconfirmed, true)}
+                </div>
+              )}
             </>
           )}
         </div>

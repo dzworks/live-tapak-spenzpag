@@ -825,7 +825,16 @@ export const DEFAULT_ATTENDANCE_LOGS: AttendanceLogItem[] = [
 
 export const RAW_SAMPLE_ATTENDANCE = DEFAULT_ATTENDANCE_LOGS;
 
-// 7. JADWAL PERIODE (Senin-Kamis 9 JP & Jumat 5 JP)
+// 7. JADWAL PERIODE (Senin-Kamis 9 JP + Istirahat Statis & Jumat 5 JP + Istirahat Statis)
+export const BREAK_TIMES_REGULAR: PeriodSchedule[] = [
+  { period: 0, label: 'Istirahat 1', startTime: '09:40', endTime: '10:00', isBreak: true },
+  { period: 0, label: 'Istirahat 2', startTime: '12:00', endTime: '12:40', isBreak: true },
+];
+
+export const BREAK_TIMES_FRIDAY: PeriodSchedule[] = [
+  { period: 0, label: 'Istirahat', startTime: '09:00', endTime: '09:45', isBreak: true },
+];
+
 export const PERIOD_SCHEDULES_REGULAR: PeriodSchedule[] = [
   { period: 1, label: 'Jam 1', startTime: '07:00', endTime: '07:40' },
   { period: 2, label: 'Jam 2', startTime: '07:40', endTime: '08:20' },
@@ -839,11 +848,11 @@ export const PERIOD_SCHEDULES_REGULAR: PeriodSchedule[] = [
 ];
 
 export const PERIOD_SCHEDULES_FRIDAY: PeriodSchedule[] = [
-  { period: 1, label: 'Jam 1', startTime: '07:30', endTime: '08:05' },
-  { period: 2, label: 'Jam 2', startTime: '08:05', endTime: '08:40' },
-  { period: 3, label: 'Jam 3', startTime: '08:40', endTime: '09:15' },
-  { period: 4, label: 'Jam 4', startTime: '10:05', endTime: '10:40' },
-  { period: 5, label: 'Jam 5', startTime: '10:40', endTime: '11:15' },
+  { period: 1, label: 'Jam 1', startTime: '07:30', endTime: '08:00' },
+  { period: 2, label: 'Jam 2', startTime: '08:00', endTime: '08:30' },
+  { period: 3, label: 'Jam 3', startTime: '08:30', endTime: '09:00' },
+  { period: 4, label: 'Jam 4', startTime: '09:45', endTime: '10:15' },
+  { period: 5, label: 'Jam 5', startTime: '10:15', endTime: '10:45' },
 ];
 
 export const PERIOD_SCHEDULES = PERIOD_SCHEDULES_REGULAR;
