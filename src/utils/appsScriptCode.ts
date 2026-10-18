@@ -383,10 +383,33 @@ export function resolveScheduleSlot(
       statusColor = 'yellow';
       statusLabel = `Guru Tidak Hadir (${matchingLog.statusKehadiran})`;
     } else if (matchingLog.statusKehadiran === 'Hadir') {
-      statusColor = 'green';
-      statusLabel = `Hadir di Kelas (Absen: ${matchingLog.waktuAbsen || '-'} WIB)`;
+      const isRegularClassroom = (() => {
+        if (!matchingLog.ruangBelajar || matchingLog.ruangBelajar.trim() === '') return true;
+        const clean = matchingLog.ruangBelajar.trim().toLowerCase();
+        if (clean === 'ruang kelas' || clean === 'kelas' || clean === 'di dalam kelas' || clean === 'dalam kelas') return true;
+        if (defaultRoom && clean === defaultRoom.trim().toLowerCase()) return true;
+        if (/^(r\.|ruang\s+kelas|kelas)\s+[a-z0-9\-]+$/i.test(clean)) return true;
+        return false;
+      })();
+
+      if (isRegularClassroom) {
+        statusColor = 'green';
+        statusLabel = `Hadir di Kelas (Absen: ${matchingLog.waktuAbsen || '-'} WIB)`;
+      } else {
+        statusColor = 'blue';
+        statusLabel = `Hadir di Luar Kelas (${activeRoom}) - Absen: ${matchingLog.waktuAbsen || '-'} WIB`;
+      }
     } else {
-      statusColor = 'green';
+      const isRegularClassroom = (() => {
+        if (!matchingLog.ruangBelajar || matchingLog.ruangBelajar.trim() === '') return true;
+        const clean = matchingLog.ruangBelajar.trim().toLowerCase();
+        if (clean === 'ruang kelas' || clean === 'kelas' || clean === 'di dalam kelas' || clean === 'dalam kelas') return true;
+        if (defaultRoom && clean === defaultRoom.trim().toLowerCase()) return true;
+        if (/^(r\.|ruang\s+kelas|kelas)\s+[a-z0-9\-]+$/i.test(clean)) return true;
+        return false;
+      })();
+
+      statusColor = isRegularClassroom ? 'green' : 'blue';
       statusLabel = matchingLog.statusKehadiran;
     }
   } else {

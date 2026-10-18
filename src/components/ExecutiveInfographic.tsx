@@ -454,53 +454,58 @@ export const ExecutiveInfographic: React.FC<ExecutiveInfographicProps> = ({
 
   return (
     <div className="mb-3 rounded-2xl bg-white border border-slate-200/90 shadow-2xs overflow-hidden transition-all">
-      {/* 1. KOTAK ATAS: Jam Ke, Durasi, dan Realtime WIB (Besar & Mencolok) + Toggle Ciutkan */}
-      <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 text-white border-b border-slate-800 shadow-xs">
-        <div className="flex items-center gap-2 sm:gap-3.5 flex-wrap">
-          {/* Jam Ke Badge Besar */}
-          <div className="flex items-center gap-1.5">
-            <span className="bg-indigo-600 hover:bg-indigo-500 text-white font-mono px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-lg text-xs sm:text-sm md:text-base font-black shadow-sm border border-indigo-400/40 tracking-tight transition-colors">
-              {isWeekend ? 'AKHIR PEKAN' : `JAM KE-${activePeriodNumber}`}
+      {/* 1. KOTAK ATAS: Jam Ke (Besar di Baris 1), Durasi dan Realtime di Baris 2 + Toggle Ciutkan */}
+      <div className="px-3 sm:px-4 py-2.5 sm:py-3 bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 text-white border-b border-slate-800 shadow-xs">
+        {/* BARIS 1: Jam Ke Ukuran Lebih Besar & Menonjol + Status KBM + Toggle */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
+            <span className="text-base sm:text-xl md:text-2xl font-black font-mono tracking-tight text-white flex items-center gap-2">
+              <span className="bg-gradient-to-r from-indigo-600 to-indigo-500 text-white px-3 sm:px-4 py-1 rounded-xl shadow-md border border-indigo-400/50">
+                {isWeekend ? 'AKHIR PEKAN' : `Jam ke-${activePeriodNumber}`}
+              </span>
+            </span>
+
+            {/* Status Kelancaran KBM */}
+            <span className={`text-[11px] sm:text-xs font-bold px-2.5 py-1 rounded-full border inline-flex items-center gap-1.5 ${kbmStatus.color}`}>
+              <Sparkles className="w-3.5 h-3.5" />
+              {kbmStatus.text}
             </span>
           </div>
 
-          <span className="text-slate-500 hidden min-[380px]:inline text-sm font-light">|</span>
+          {/* Tombol Ciutkan / Buka Panel Infografis */}
+          <button
+            onClick={() => setIsCollapsed(prev => !prev)}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-colors cursor-pointer shrink-0 ml-auto"
+            title={isCollapsed ? 'Buka Infografis KBM' : 'Ciutkan Infografis KBM'}
+          >
+            <span className="hidden sm:inline">{isCollapsed ? 'Buka Ringkasan' : 'Ciutkan'}</span>
+            {isCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+          </button>
+        </div>
 
-          {/* Durasi Waktu Jam KBM Terpadu */}
-          <div className="flex items-center gap-1 text-slate-200 font-mono text-xs sm:text-sm md:text-base font-bold tracking-tight">
-            <Clock className="w-3.5 h-3.5 text-indigo-400 shrink-0 hidden sm:inline" />
-            <span>{isWeekend ? 'Hari Libur KBM' : timeRangeText}</span>
+        {/* BARIS 2: Durasi Jam KBM dan Jam Realtime WIB */}
+        <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center gap-2 sm:gap-3.5 flex-wrap">
+          {/* Durasi Waktu Jam KBM */}
+          <div className="flex items-center gap-1.5 bg-slate-900/90 text-slate-200 px-2.5 sm:px-3 py-1 rounded-lg border border-slate-800 font-mono text-xs sm:text-sm font-semibold tracking-tight shadow-inner">
+            <Clock className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+            <span className="text-slate-400 text-[11px] font-normal hidden sm:inline">Durasi KBM:</span>
+            <span>{isWeekend ? 'Hari Libur KBM' : timeRangeText} WIB</span>
           </div>
 
-          <span className="text-slate-500 hidden sm:inline text-sm font-light">|</span>
+          <span className="text-slate-600 hidden min-[400px]:inline text-xs">·</span>
 
-          {/* Jam Realtime WIB Digital Besar & Mencolok */}
-          <div className="flex items-center gap-1.5 bg-slate-950/80 px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-lg border border-emerald-500/40 shadow-inner">
+          {/* Jam Realtime WIB Digital */}
+          <div className="flex items-center gap-2 bg-slate-950/90 px-3 py-1 rounded-lg border border-emerald-500/40 shadow-inner">
             <span className="relative flex h-2 sm:h-2.5 w-2 sm:w-2.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 sm:h-2.5 w-2 sm:w-2.5 bg-emerald-500"></span>
             </span>
-            <span className="text-emerald-400 font-mono font-black tracking-wider text-xs sm:text-sm md:text-base">
-              {wibTimeStr}
+            <span className="text-slate-400 text-[11px] font-normal hidden min-[480px]:inline">Realtime:</span>
+            <span className="text-emerald-400 font-mono font-black tracking-wider text-xs sm:text-sm">
+              {wibTimeStr} WIB
             </span>
           </div>
-
-          {/* Status Kelancaran KBM */}
-          <span className={`text-[10px] sm:text-[11px] font-bold px-2.5 py-0.5 sm:py-1 rounded-full border hidden xl:inline-flex items-center gap-1 ${kbmStatus.color}`}>
-            <Sparkles className="w-3 h-3" />
-            {kbmStatus.text}
-          </span>
         </div>
-
-        {/* Tombol Ciutkan / Buka Panel Infografis */}
-        <button
-          onClick={() => setIsCollapsed(prev => !prev)}
-          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-colors cursor-pointer shrink-0 ml-2"
-          title={isCollapsed ? 'Buka Infografis KBM' : 'Ciutkan Infografis KBM'}
-        >
-          <span className="hidden sm:inline">{isCollapsed ? 'Buka Ringkasan' : 'Ciutkan'}</span>
-          {isCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-        </button>
       </div>
 
       {/* Konten Infografis Utama (Bisa diciutkan) */}

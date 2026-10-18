@@ -1,6 +1,6 @@
 {
-  "summary": "Rencana perbaikan logika waktu selesai KBM (setelah jam pelajaran berakhir/waktu pulang sekolah) pada Sesi Harian dan penghapusan teks 'Kondisi: Perlu perhatian piket' agar tampilan lebih ringkas.",
-  "updatedAt": "2026-10-16T08:48:51.753415908Z",
+  "summary": "Rencana implementasi revisi:\n1. Penataan infografis Jam Ke: tulisan 'Jam Ke' ukuran lebih besar di baris pertama, durasi KBM dan jam realtime di baris kedua.\n2. Logika warna sesi mapel: guru hadir di ruang kelas = hijau, guru hadir selain ruang kelas = biru.\n3. Matriks kelas: ubah judul kolom menjadi 'Kelas' saja serta hilangkan kata dan data ruang pada isi kolom agar visual lebih ringkas.",
+  "updatedAt": "2026-10-18T13:09:29.151557918Z",
   "requestFeedback": true,
   "userFacing": true
 }

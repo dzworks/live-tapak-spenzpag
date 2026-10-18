@@ -82,7 +82,7 @@ export interface TapakDatabaseBundle {
   lastUpdated?: string;
 }
 
-export type SlotColorStatus = 'green' | 'red' | 'yellow' | 'purple' | 'slate';
+export type SlotColorStatus = 'green' | 'red' | 'yellow' | 'purple' | 'slate' | 'blue';
 
 export interface ResolvedScheduleSlot {
   schedule: ScheduleItem;

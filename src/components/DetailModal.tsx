@@ -69,6 +69,8 @@ export const DetailModal: React.FC<DetailModalProps> = ({
           <div className={`p-4 rounded-xl border flex items-center justify-between ${
             statusColor === 'green'
               ? 'bg-emerald-50 border-emerald-200 text-emerald-950'
+              : statusColor === 'blue'
+              ? 'bg-sky-50 border-sky-200 text-sky-950'
               : statusColor === 'purple'
               ? 'bg-purple-50 border-purple-200 text-purple-950'
               : statusColor === 'yellow'
@@ -80,11 +82,13 @@ export const DetailModal: React.FC<DetailModalProps> = ({
             <div className="flex items-center gap-3">
               <div className={`p-2 rounded-lg text-white ${
                 statusColor === 'green' ? 'bg-emerald-600' :
+                statusColor === 'blue' ? 'bg-sky-600' :
                 statusColor === 'purple' ? 'bg-purple-600' :
                 statusColor === 'yellow' ? 'bg-amber-600' :
                 statusColor === 'red' ? 'bg-rose-600' : 'bg-slate-600'
               }`}>
                 {statusColor === 'green' ? <CheckCircle2 className="w-4 h-4" /> :
+                 statusColor === 'blue' ? <MapPin className="w-4 h-4" /> :
                  statusColor === 'purple' ? <UserCheck className="w-4 h-4" /> :
                  <AlertCircle className="w-4 h-4" />}
               </div>
