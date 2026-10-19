@@ -526,9 +526,8 @@ export const ExecutiveInfographic: React.FC<ExecutiveInfographicProps> = ({
               <div className="flex items-center justify-between text-slate-500 mb-0.5">
                 <span className="text-[10.5px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1 truncate">
                   <Clock className="w-3 h-3 text-indigo-600 shrink-0" />
-                  SESI KBM HARI INI
+                  SESI KBM TEREKAM HARI INI
                 </span>
-                <span className="text-[9.5px] text-slate-400 font-mono shrink-0">Jam 1 - {activePeriodNumber}</span>
               </div>
 
               <div className="flex items-center justify-between gap-1.5">

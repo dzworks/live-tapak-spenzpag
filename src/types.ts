@@ -137,6 +137,6 @@ export interface TeacherInfo {
   noHp?: string;
 }
 
-export type ViewTab = 'matrix' | 'empty-classes' | 'feed';
+export type ViewTab = 'matrix' | 'empty-classes' | 'feed' | 'reports';
 
 export type DayType = 'regular' | 'friday' | 'weekend';

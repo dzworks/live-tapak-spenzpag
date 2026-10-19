@@ -1,6 +1,6 @@
 import React from 'react';
 import { ViewTab, AdminSession } from '../types';
-import { LayoutGrid, ListFilter, RefreshCw, Tv, Wifi, ShieldCheck, LogOut } from 'lucide-react';
+import { LayoutGrid, ListFilter, RefreshCw, Tv, Wifi, ShieldCheck, LogOut, FileText } from 'lucide-react';
 
 interface TopNavProps {
   currentTab: ViewTab;
@@ -75,6 +75,20 @@ export const TopNav: React.FC<TopNavProps> = ({
               <ListFilter className="w-3.5 h-3.5" />
               <span>Daftar Presensi</span>
             </button>
+
+            {adminSession && (
+              <button
+                onClick={() => onTabChange('reports')}
+                className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  currentTab === 'reports'
+                    ? 'bg-slate-800 text-white shadow-xs font-semibold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5 text-rose-400" />
+                <span>Laporan KBM</span>
+              </button>
+            )}
           </nav>
 
           {/* Zone 3: Live clock, Connection Indicator, TV Fullscreen Mode, Admin URL Lock & Refresh */}
@@ -173,16 +187,25 @@ export const TopNav: React.FC<TopNavProps> = ({
         <div className="md:hidden flex items-center justify-around py-1.5 border-t border-slate-800 text-xs">
           <button
             onClick={() => onTabChange('matrix')}
-            className={`px-3 py-1 rounded-md cursor-pointer transition-colors ${currentTab === 'matrix' ? 'bg-slate-800 text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
+            className={`px-2 py-1 rounded-md cursor-pointer transition-colors ${currentTab === 'matrix' ? 'bg-slate-800 text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
           >
-            Matriks 23 Kelas
+            Matriks
           </button>
           <button
             onClick={() => onTabChange('feed')}
-            className={`px-3 py-1 rounded-md cursor-pointer transition-colors ${currentTab === 'feed' ? 'bg-slate-800 text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
+            className={`px-2 py-1 rounded-md cursor-pointer transition-colors ${currentTab === 'feed' ? 'bg-slate-800 text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
           >
-            Daftar Presensi
+            Presensi
           </button>
+          {adminSession && (
+            <button
+              onClick={() => onTabChange('reports')}
+              className={`px-2 py-1 rounded-md cursor-pointer transition-colors flex items-center gap-1 ${currentTab === 'reports' ? 'bg-slate-800 text-rose-400 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              <FileText className="w-3 h-3 text-rose-400" />
+              <span>Laporan</span>
+            </button>
+          )}
           {onOpenAdminModal && (
             <button
               onClick={onOpenAdminModal}

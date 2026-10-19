@@ -14,15 +14,15 @@
  *    1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms
  * 4. Tempelkan ID tersebut menggantikan teks di bawah ini:
  */
-const SPREADSHEET_ID = "MASUKKAN_ID_SPREADSHEET_ANDA_DI_SINI";
+const SPREADSHEET_ID = "1a15izDig_qjKEjEEIlv6DbzqxGaDwZDogkzuw6bDSfM";
 
 /**
  * =========================================================================
- * SISTEM TAPAK LIVE MONITORING (ALL-IN-ONE 6 SHEET API)
+ * SISTEM TAPAK LIVE MONITORING (ALL-IN-ONE 7 SHEET API)
  * =========================================================================
- * Mode: 100% READ-ONLY (Membaca 6 Sheet Sekaligus dalam 1 Respons JSON)
+ * Mode: 100% READ-ONLY (Membaca 7 Sheet Sekaligus dalam 1 Respons JSON)
  *
- * 6 Sheet yang dibaca:
+ * 7 Sheet yang dibaca:
  * 1. MasterGuru     -> Kode Guru, Nama Lengkap, NIP
  * 2. MasterMapel    -> Kode Mapel, Nama Mapel
  * 3. Classes        -> Token QR, ID Kelas, Nama Kelas, Lokasi Ruang
@@ -31,6 +31,7 @@ const SPREADSHEET_ID = "MASUKKAN_ID_SPREADSHEET_ANDA_DI_SINI";
  * 6. AttendanceLogs -> Tanggal, Waktu Absen (WIB), Kelas, Mapel Ke, Kode Guru, Status Kehadiran,
  *                      Mata Pelajaran, Kegiatan Pembelajaran, Pengganti (Y/N), Info Ketidakhadiran,
  *                      Ruang Belajar, ID Kiriman
+ * 7. MasterLogin    -> Nama, Jabatan, Username, Password, Role
  */
 
 function doGet(e) {
@@ -56,7 +57,7 @@ function doGet(e) {
       });
     }
 
-    // 3. Baca 6 Sheet
+    // 3. Baca 7 Sheet
     const masterGuru = readSheetAsObjects(ss, 'MasterGuru', ['Kode Guru', 'Nama Lengkap', 'NIP']);
     const masterMapel = readSheetAsObjects(ss, 'MasterMapel', ['Kode Mapel', 'Nama Mapel']);
     const classes = readSheetAsObjects(ss, 'Classes', ['Token QR', 'ID Kelas', 'Nama Kelas', 'Lokasi Ruang']);
@@ -69,6 +70,7 @@ function doGet(e) {
       'Status Kehadiran', 'Jam Ke', 'Jam Mulai', 'Jam Selesai', 'Ruang Belajar',
       'Kegiatan Pembelajaran', 'Info Ketidakhadiran', 'Pengganti (Y/N)', 'Sumber Data', 'ID Kiriman'
     ]);
+    const masterLogin = readSheetAsObjects(ss, 'MasterLogin', ['Nama', 'Jabatan', 'Username', 'Password', 'Role']);
 
     // 4. Normalisasi Data
     const normalizedGuru = masterGuru.map(r => ({
@@ -125,6 +127,14 @@ function doGet(e) {
       idKiriman: String(r['ID Kiriman'] || '').trim()
     })).filter(l => l.kelas && l.tanggal);
 
+    const normalizedLogin = masterLogin.map(r => ({
+      nama: String(r['Nama'] || r['Nama Lengkap'] || '').trim(),
+      jabatan: String(r['Jabatan'] || '').trim(),
+      username: String(r['Username'] || r['User'] || '').trim(),
+      password: String(r['Password'] || r['Sandi'] || '').trim(),
+      role: String(r['Role'] || r['Hak Akses'] || 'Admin').trim()
+    })).filter(u => u.username && u.password);
+
     // 5. Kembalikan Respons JSON Sukses
     return createJsonResponse({
       status: 'success',
@@ -139,7 +149,8 @@ function doGet(e) {
         classes: normalizedClasses.length,
         masterRuangan: normalizedRuangan.length,
         schedules: normalizedSchedules.length,
-        attendanceLogs: normalizedLogs.length
+        attendanceLogs: normalizedLogs.length,
+        masterLogin: normalizedLogin.length
       },
       data: {
         masterGuru: normalizedGuru,
@@ -147,7 +158,8 @@ function doGet(e) {
         classes: normalizedClasses,
         masterRuangan: normalizedRuangan,
         schedules: normalizedSchedules,
-        attendanceLogs: normalizedLogs
+        attendanceLogs: normalizedLogs,
+        masterLogin: normalizedLogin
       }
     });
 
@@ -222,7 +234,7 @@ function testStandaloneConnection() {
     const allSheets = ss.getSheets().map(s => s.getName());
     Logger.log("Daftar Sheet yang ada: " + allSheets.join(", "));
 
-    const requiredSheets = ['MasterGuru', 'MasterMapel', 'Classes', 'MasterRuangan', 'Schedules', 'AttendanceLogs'];
+    const requiredSheets = ['MasterGuru', 'MasterMapel', 'Classes', 'MasterRuangan', 'Schedules', 'AttendanceLogs', 'MasterLogin'];
     let foundCount = 0;
     requiredSheets.forEach(name => {
       if (allSheets.includes(name)) {

@@ -45,6 +45,7 @@ import { ExecutiveInfographic } from './components/ExecutiveInfographic';
 import { ClassroomMatrix } from './components/ClassroomMatrix';
 import { EmptyClassesView } from './components/EmptyClassesView';
 import { AttendanceFeed } from './components/AttendanceFeed';
+import { ReportWorkspace } from './components/ReportWorkspace';
 import { DetailModal } from './components/DetailModal';
 import { AdminUrlModal } from './components/AdminUrlModal';
 import { InitialSetupModal } from './components/InitialSetupModal';
@@ -116,6 +117,7 @@ export default function App() {
 
   const handleLogout = useCallback(() => {
     setAdminSession(null);
+    setCurrentTab(prev => (prev === 'reports' ? 'matrix' : prev));
     try {
       localStorage.removeItem('gurulive_admin_session');
     } catch {}
@@ -608,23 +610,6 @@ export default function App() {
               </span>
             )}
           </div>
-
-          {/* Status Sesi Jam KBM Real-time (Simulasi Jam Ditiadakan) */}
-          <div className="flex items-center gap-2 self-start sm:self-auto bg-slate-50 px-3 py-1 rounded-lg border border-slate-200 text-xs font-medium text-slate-700">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-            <span className="text-slate-500 text-[11px]">Sesi KBM:</span>
-            <span className="font-semibold text-slate-900 font-mono">
-              {isWeekend 
-                ? 'Akhir Pekan (Libur)' 
-                : activePeriodScheduleInfo 
-                  ? `${activePeriodScheduleInfo.label} (${activePeriodScheduleInfo.startTime} - ${activePeriodScheduleInfo.endTime})` 
-                  : `Jam Ke-${activePeriodNumber}`
-              }
-            </span>
-          </div>
         </div>
 
         {/* 3. Infografis Eksekutif KBM Hari Ini (Kepala Sekolah & Guru Piket) */}
@@ -748,6 +733,27 @@ export default function App() {
             selectedDate={selectedDate}
           />
         )}
+
+        {currentTab === 'reports' && (
+          <ReportWorkspace
+            adminSession={adminSession}
+            onOpenAdminModal={() => setIsAdminModalOpen(true)}
+            schedules={schedules}
+            attendanceLogs={attendanceLogs}
+            masterGuru={masterGuru}
+            classes={classes}
+            masterMapel={masterMapel}
+            masterRuangan={masterRuangan}
+            selectedDate={selectedDate}
+            wibTimeStr={wibTimeStr}
+            onManualRefresh={() => {
+              if (appsScriptUrl) {
+                fetchFromAppsScript(appsScriptUrl);
+              }
+            }}
+            isSyncing={isSyncing}
+          />
+        )}
       </main>
 
       {/* 5. Pop-up Awal Pengisian Link Backend ketika belum terekam */}
@@ -777,6 +783,12 @@ export default function App() {
         adminSession={adminSession}
         onLoginSuccess={handleLoginSuccess}
         onLogout={handleLogout}
+        schedules={schedules}
+        attendanceLogs={attendanceLogs}
+        masterGuru={masterGuru}
+        classes={classes}
+        selectedDate={selectedDate}
+        wibTimeStr={wibTimeStr}
       />
 
       {/* 8. Sistem Alert Visual (Toast) Presensi Masuk Real-Time */}

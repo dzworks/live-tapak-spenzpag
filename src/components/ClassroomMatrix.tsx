@@ -59,7 +59,7 @@ interface ClassroomMatrixProps {
   isFullscreen?: boolean;
 }
 
-export type SortOption = 'default' | 'unattended-first' | 'name-asc' | 'room';
+export type SortOption = 'default' | 'percent-asc' | 'percent-desc' | 'unattended-first' | 'name-asc' | 'room';
 
 export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
   classes,
@@ -86,7 +86,7 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
     setInternalSelectedGrade(g);
     if (onSelectGrade) onSelectGrade(g);
   };
-  const [statusFilter, setStatusFilter] = useState<'all' | 'hadir' | 'belum' | 'infal'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'hadir' | 'belum' | 'infal' | 'zero'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('default');
 
@@ -250,6 +250,9 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
       hasUnattendedToday: boolean;
       hasHadirToday: boolean;
       hasInfalToday: boolean;
+      totalScheduledSessions: number;
+      presentSessions: number;
+      attendancePercent: number;
     }> = {};
 
     classes.forEach(cls => {
@@ -257,6 +260,24 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
       let hasUnattendedToday = false;
       let hasHadirToday = false;
       let hasInfalToday = false;
+
+      // Hitung total jam KBM yang terjadwal untuk kelas ini hari ini
+      const clsSchedules = daySchedules.filter(
+        s => normalizeClassName(s.namaKelas) === normalizeClassName(cls.namaKelas)
+      );
+
+      const scheduledPeriodsSet = new Set<number>();
+      clsSchedules.forEach(sched => {
+        if (sched.periods && sched.periods.length > 0) {
+          sched.periods.forEach(p => scheduledPeriodsSet.add(p));
+        } else if (sched.startPeriod) {
+          for (let p = sched.startPeriod; p <= (sched.endPeriod || sched.startPeriod); p++) {
+            scheduledPeriodsSet.add(p);
+          }
+        }
+      });
+      const totalScheduledSessions = scheduledPeriodsSet.size;
+      let presentSessions = 0;
 
       const totalPeriods = currentSchedules.length;
       for (let p = 1; p <= totalPeriods; p++) {
@@ -282,17 +303,29 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
           if (slot.statusColor === 'green' || slot.statusColor === 'blue') hasHadirToday = true;
           if (slot.statusColor === 'purple') hasInfalToday = true;
 
+          // Sesi dihitung hadir jika status Hadir (green/blue) atau Pengganti (Y/purple)
+          if ((slot.statusColor === 'green' || slot.statusColor === 'blue' || slot.statusColor === 'purple' || slot.attendance?.pengganti === 'Y') && !isSample) {
+            presentSessions++;
+          }
+
           if (p === activePeriodNumber) {
             activeSlotColor = (slot.statusColor === 'red' && isSample) ? 'none' : slot.statusColor;
           }
         }
       }
 
+      const attendancePercent = totalScheduledSessions > 0
+        ? Math.round((presentSessions / totalScheduledSessions) * 100)
+        : 0;
+
       map[cls.namaKelas] = {
         activeSlotColor,
         hasUnattendedToday,
         hasHadirToday,
         hasInfalToday,
+        totalScheduledSessions,
+        presentSessions,
+        attendancePercent,
       };
     });
 
@@ -315,10 +348,14 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
     let hadir = 0;
     let belum = 0;
     let infal = 0;
+    let zero = 0;
 
     baseClasses.forEach(c => {
       const st = classStatusMap[c.namaKelas];
       if (!st) return;
+      if (st.attendancePercent === 0 && st.totalScheduledSessions > 0) {
+        zero++;
+      }
       if (activePeriodNumber > 0) {
         if (st.activeSlotColor === 'green' || st.activeSlotColor === 'blue') hadir++;
         else if (st.activeSlotColor === 'red') belum++;
@@ -335,6 +372,7 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
       hadir,
       belum,
       infal,
+      zero,
     };
   }, [classes, selectedGrade, searchQuery, classStatusMap, activePeriodNumber]);
 
@@ -385,6 +423,9 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
 
         const st = classStatusMap[c.namaKelas];
         if (!st) return false;
+        if (statusFilter === 'zero') {
+          return st.attendancePercent === 0 && st.totalScheduledSessions > 0;
+        }
         if (activePeriodNumber > 0) {
           if (statusFilter === 'hadir') return st.activeSlotColor === 'green' || st.activeSlotColor === 'blue';
           if (statusFilter === 'belum') return st.activeSlotColor === 'red';
@@ -400,7 +441,21 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
 
     // 3. Sorting Dinamis
     const sorted = [...result];
-    if (sortBy === 'unattended-first') {
+    if (sortBy === 'percent-asc') {
+      sorted.sort((a, b) => {
+        const pctA = classStatusMap[a.namaKelas]?.attendancePercent ?? 0;
+        const pctB = classStatusMap[b.namaKelas]?.attendancePercent ?? 0;
+        if (pctA !== pctB) return pctA - pctB;
+        return a.namaKelas.localeCompare(b.namaKelas, undefined, { numeric: true });
+      });
+    } else if (sortBy === 'percent-desc') {
+      sorted.sort((a, b) => {
+        const pctA = classStatusMap[a.namaKelas]?.attendancePercent ?? 0;
+        const pctB = classStatusMap[b.namaKelas]?.attendancePercent ?? 0;
+        if (pctA !== pctB) return pctB - pctA;
+        return a.namaKelas.localeCompare(b.namaKelas, undefined, { numeric: true });
+      });
+    } else if (sortBy === 'unattended-first') {
       sorted.sort((a, b) => {
         const stA = classStatusMap[a.namaKelas];
         const stB = classStatusMap[b.namaKelas];
@@ -649,6 +704,27 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                   {statusCounts.infal}
                 </span>
               </button>
+              <button
+                onClick={() => {
+                  setStatusFilter('zero');
+                  setSortBy('percent-asc');
+                }}
+                className={`px-2 py-0.5 text-[11px] font-medium rounded transition-colors cursor-pointer flex items-center gap-1 ${
+                  statusFilter === 'zero'
+                    ? 'bg-rose-700 text-white font-bold ring-1 ring-rose-300'
+                    : 'text-rose-700 hover:bg-rose-50'
+                }`}
+                title="Filter cepat kelas 0% Guru Hadir (Perlu Perhatian Piket)"
+              >
+                <span>0% Hadir</span>
+                <span className={`text-[10px] px-1 rounded-full font-bold ${
+                  statusFilter === 'zero'
+                    ? 'bg-white/20 text-white'
+                    : statusCounts.zero > 0 ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-500'
+                }`}>
+                  {statusCounts.zero}
+                </span>
+              </button>
             </div>
           </div>
 
@@ -665,6 +741,8 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
               className="text-xs bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-slate-800 font-semibold focus:outline-none focus:ring-1 focus:ring-slate-400 cursor-pointer shadow-2xs hover:bg-slate-50"
             >
               <option value="default">Urutan Standar (VII → IX)</option>
+              <option value="percent-asc">📉 % Guru Hadir (Terendah → Tertinggi)</option>
+              <option value="percent-desc">📈 % Guru Hadir (Tertinggi → Terendah)</option>
               <option value="unattended-first">⚠️ Belum Absen Teratas (Prioritas)</option>
               <option value="name-asc">Nama Kelas (A - Z)</option>
               <option value="room">Lokasi Ruangan</option>
@@ -766,15 +844,15 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                                 <th 
                                   style={{ 
                                     width: `${classColWidthPercent}%`, 
-                                    minWidth: (activeFullscreen || showDualColumn) ? undefined : '78px', 
-                                    maxWidth: (activeFullscreen || showDualColumn) ? undefined : '100px' 
+                                    minWidth: (activeFullscreen || showDualColumn) ? undefined : '84px', 
+                                    maxWidth: (activeFullscreen || showDualColumn) ? undefined : '110px' 
                                   }}
-                                  className="sticky left-0 z-30 py-2 px-2.5 bg-slate-100 border-r border-slate-300/80 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.08)] select-none"
+                                  className="sticky left-0 z-30 py-1.5 px-2 bg-slate-100 border-r border-slate-300/80 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.08)] select-none"
                                 >
-                                  <div className="leading-tight">
-                                    <span className="block font-bold text-slate-800">Kelas</span>
-                                    <span className="text-[10px] text-slate-500 font-mono font-normal">
-                                      {classList.length} Rombel
+                                  <div className="leading-tight flex flex-col justify-between">
+                                    <span className="block font-bold text-slate-800 text-xs">Kelas</span>
+                                    <span className="text-[9px] text-slate-500 font-mono font-medium truncate" title="Persentase Kehadiran Guru Hari Ini">
+                                      % Guru Hadir
                                     </span>
                                   </div>
                                 </th>
@@ -1141,10 +1219,10 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                                     <td 
                                       style={{ 
                                         width: `${classColWidthPercent}%`,
-                                        minWidth: (activeFullscreen || showDualColumn) ? undefined : '78px',
-                                        maxWidth: (activeFullscreen || showDualColumn) ? undefined : '100px'
+                                        minWidth: (activeFullscreen || showDualColumn) ? undefined : '84px',
+                                        maxWidth: (activeFullscreen || showDualColumn) ? undefined : '110px'
                                       }}
-                                      className={`sticky left-0 z-20 px-2.5 border-r border-slate-300/80 font-medium py-1 transition-colors shadow-[2px_0_6px_-2px_rgba(0,0,0,0.08)] ${
+                                      className={`sticky left-0 z-20 px-2 border-r border-slate-300/80 font-medium py-1 transition-colors shadow-[2px_0_6px_-2px_rgba(0,0,0,0.08)] ${
                                         isHighlighted 
                                           ? 'bg-amber-100 font-black text-indigo-900' 
                                           : isRecentlyUpdated
@@ -1152,15 +1230,52 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                                           : 'bg-white'
                                       }`}
                                     >
-                                      <div className="flex items-center justify-between gap-1 leading-none py-0.5">
-                                        <span className="font-bold text-slate-900 text-xs font-mono tracking-tight">{shortName}</span>
-                                        {isRecentlyUpdated && (
-                                          <span className="flex items-center gap-0.5 text-[9px] font-bold bg-emerald-600 text-white px-1.5 py-0.5 rounded-full animate-bounce shrink-0" title="Presensi Baru Saja Masuk!">
-                                            <BellRing className="w-2.5 h-2.5" />
-                                            <span className="hidden sm:inline">Baru</span>
-                                          </span>
-                                        )}
-                                      </div>
+                                      {(() => {
+                                        const st = classStatusMap[cls.namaKelas];
+                                        return (
+                                          <div className="flex flex-col gap-0.5 justify-center h-full py-0.5">
+                                            <div className="flex items-center justify-between gap-1 leading-none">
+                                              <span className="font-bold text-slate-900 text-xs font-mono tracking-tight">{shortName}</span>
+                                              {isRecentlyUpdated && (
+                                                <span className="flex items-center gap-0.5 text-[8.5px] font-bold bg-emerald-600 text-white px-1 py-0.2 rounded-full animate-bounce shrink-0" title="Presensi Baru Saja Masuk!">
+                                                  <BellRing className="w-2 h-2" />
+                                                </span>
+                                              )}
+                                            </div>
+
+                                            {st && st.totalScheduledSessions > 0 && (
+                                              <div className="flex flex-col gap-0.5 mt-0.5" title={`${st.presentSessions} dari ${st.totalScheduledSessions} sesi KBM terisi kehadiran hari ini`}>
+                                                <div className="flex items-center justify-between text-[9px] leading-tight">
+                                                  <span className={`px-1 py-0.2 rounded font-bold font-mono text-[8.5px] border ${
+                                                    st.attendancePercent >= 80 
+                                                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
+                                                      : st.attendancePercent >= 50 
+                                                      ? 'bg-amber-50 text-amber-800 border-amber-200' 
+                                                      : 'bg-rose-50 text-rose-800 border-rose-200'
+                                                  }`}>
+                                                    {st.attendancePercent}%
+                                                  </span>
+                                                  <span className="text-[8px] text-slate-400 font-mono font-medium shrink-0">
+                                                    {st.presentSessions}/{st.totalScheduledSessions}
+                                                  </span>
+                                                </div>
+                                                <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden border border-slate-200/60">
+                                                  <div 
+                                                    className={`h-full transition-all duration-500 ${
+                                                      st.attendancePercent >= 80 
+                                                        ? 'bg-emerald-500' 
+                                                        : st.attendancePercent >= 50 
+                                                        ? 'bg-amber-500' 
+                                                        : 'bg-rose-500'
+                                                    }`}
+                                                    style={{ width: `${st.attendancePercent}%` }}
+                                                  />
+                                                </div>
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
                                     </td>
                                     {cells}
                                   </tr>
