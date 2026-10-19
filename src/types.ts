@@ -69,6 +69,22 @@ export interface AttendanceLogItem {
   history?: AttendanceLogItem[];
 }
 
+export interface MasterLoginAccount {
+  nama: string;
+  jabatan: string;
+  username: string;
+  password: string;
+  role: string;
+}
+
+export interface AdminSession {
+  username: string;
+  nama: string;
+  jabatan: string;
+  role: string;
+  loginAt: string;
+}
+
 // Backward compatibility alias for AttendanceRecord
 export type AttendanceRecord = AttendanceLogItem;
 
@@ -79,6 +95,7 @@ export interface TapakDatabaseBundle {
   masterRuangan: MasterRuangan[];
   schedules: ScheduleItem[];
   attendanceLogs: AttendanceLogItem[];
+  masterLogin?: MasterLoginAccount[];
   lastUpdated?: string;
 }
 

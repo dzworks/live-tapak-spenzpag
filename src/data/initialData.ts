@@ -8,9 +8,35 @@ import {
   PeriodSchedule, 
   SchoolClass, 
   TeacherInfo, 
-  DayType 
+  DayType,
+  MasterLoginAccount
 } from '../types';
 import { parsePeriodRange } from '../utils/appsScriptCode';
+
+// MASTER LOGIN (Database Kredensial Administrator dari Sheet MasterLogin)
+export const DEFAULT_MASTER_LOGIN: MasterLoginAccount[] = [
+  {
+    nama: 'Administrator TAPAK',
+    jabatan: 'Admin Sistem',
+    username: 'admin',
+    password: '123',
+    role: 'Superadmin'
+  },
+  {
+    nama: 'Dzul Fikri, S.Pd.',
+    jabatan: 'Waka Kurikulum',
+    username: 'dzulfikri',
+    password: '123',
+    role: 'Admin'
+  },
+  {
+    nama: 'Drs. Wahyudi',
+    jabatan: 'Koordinator Piket',
+    username: 'piket',
+    password: '123',
+    role: 'Piket'
+  }
+];
 
 // 1. MASTER GURU (Kamus Kode Guru -> Nama Lengkap & NIP)
 export const DEFAULT_MASTER_GURU: MasterGuru[] = [

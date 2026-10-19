@@ -796,7 +796,7 @@ export const ExecutiveInfographic: React.FC<ExecutiveInfographicProps> = ({
                 {absentTeacherList.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-center p-1 bg-emerald-50/50 rounded-lg border border-emerald-100">
                     <ShieldCheck className="w-4 h-4 text-emerald-600 mb-0.5" />
-                    <span className="text-[9.5px] font-bold text-emerald-800">Semua Guru Hadir</span>
+                    <span className="text-[9.5px] font-bold text-emerald-800">Tidak ada Guru Izin</span>
                     <span className="text-[8.5px] text-emerald-600">Nihil Izin / Sakit Hari Ini</span>
                   </div>
                 ) : (

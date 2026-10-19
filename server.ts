@@ -91,16 +91,45 @@ async function startServer() {
     return res.status(401).json({ success: false, message: 'PIN tidak sesuai' });
   });
 
-  // API Route: Simpan URL baru dan/atau perbarui PIN Pengawas
-  app.post('/api/config', (req, res) => {
-    const { scriptUrl, pin, newPin } = req.body;
+  // API Route: Verifikasi Login Admin (Username & Password)
+  app.post('/api/verify-login', (req, res) => {
+    const { username, password } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ success: false, message: 'Username dan Password wajib diisi' });
+    }
     const config = loadConfig();
     const currentPin = config.adminPin || '1234';
 
-    if (String(pin).trim() !== currentPin) {
+    // Akun superadmin default lokal
+    if (
+      (username.trim() === 'admin' && (password.trim() === '123' || password.trim() === currentPin)) ||
+      (username.trim() === 'superadmin' && password.trim() === 'admin123')
+    ) {
+      return res.json({
+        success: true,
+        account: {
+          username: username.trim(),
+          nama: 'Administrator TAPAK',
+          jabatan: 'Admin Sistem',
+          role: 'Superadmin'
+        }
+      });
+    }
+
+    return res.json({ success: false, message: 'Akun tidak terdaftar pada konfigurasi lokal server' });
+  });
+
+  // API Route: Simpan URL baru dan/atau perbarui PIN Pengawas
+  app.post('/api/config', (req, res) => {
+    const { scriptUrl, pin, newPin, isAuthorized } = req.body;
+    const config = loadConfig();
+    const currentPin = config.adminPin || '1234';
+
+    // Izinkan penyimpanan jika PIN cocok ATAU sudah terverifikasi melalui login admin (isAuthorized)
+    if (!isAuthorized && String(pin).trim() !== currentPin) {
       return res.status(401).json({
         success: false,
-        message: 'PIN Pengawas tidak sah. Akses ditolak.',
+        message: 'Akses tidak sah. Silakan login terlebih dahulu.',
       });
     }
 

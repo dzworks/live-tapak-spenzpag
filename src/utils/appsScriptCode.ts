@@ -8,9 +8,10 @@ import {
   TapakDatabaseBundle,
   ResolvedScheduleSlot,
   PeriodSchedule,
-  PeriodSchedule as PeriodType
+  PeriodSchedule as PeriodType,
+  MasterLoginAccount
 } from '../types';
-import { PERIOD_SCHEDULES_REGULAR, PERIOD_SCHEDULES_FRIDAY } from '../data/initialData';
+import { PERIOD_SCHEDULES_REGULAR, PERIOD_SCHEDULES_FRIDAY, DEFAULT_MASTER_LOGIN } from '../data/initialData';
 
 const MONTH_NAMES_ID = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nop', 'Des'];
 
@@ -298,6 +299,18 @@ export function processTapakBundle(rawBundle: any): TapakDatabaseBundle {
     ? rawBundle.attendanceLogs.map(enrichAttendanceLogItem).filter((l: AttendanceLogItem) => Boolean(l.kelas && l.tanggal))
     : [];
 
+  // MasterLogin dari Sheet MasterLogin: Nama | Jabatan | Username | Password | Role
+  const rawLoginList = rawBundle.masterLogin || rawBundle.MasterLogin || rawBundle['master_login'];
+  const masterLogin: MasterLoginAccount[] = Array.isArray(rawLoginList) && rawLoginList.length > 0
+    ? rawLoginList.map((u: any) => ({
+        nama: String(u.nama || u['Nama'] || u['Nama Lengkap'] || '').trim(),
+        jabatan: String(u.jabatan || u['Jabatan'] || '').trim(),
+        username: String(u.username || u['Username'] || u['User'] || '').trim(),
+        password: String(u.password || u['Password'] || u['Sandi'] || '').trim(),
+        role: String(u.role || u['Role'] || u['Hak Akses'] || 'Admin').trim(),
+      })).filter((u: MasterLoginAccount) => Boolean(u.username && u.password))
+    : DEFAULT_MASTER_LOGIN;
+
   return {
     masterGuru,
     masterMapel,
@@ -305,6 +318,7 @@ export function processTapakBundle(rawBundle: any): TapakDatabaseBundle {
     masterRuangan,
     schedules,
     attendanceLogs,
+    masterLogin: masterLogin.length > 0 ? masterLogin : DEFAULT_MASTER_LOGIN,
     lastUpdated: new Date().toISOString(),
   };
 }

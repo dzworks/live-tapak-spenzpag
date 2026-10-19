@@ -337,13 +337,13 @@ export const UnconfirmedClassesSection: React.FC<UnconfirmedClassesSectionProps>
             </div>
           ) : (
             <>
-              {/* BAGIAN ATAS: KELAS BELUM TERKONFIRMASI PADA JAM MENGAJAR BERJALAN */}
+              {/* BAGIAN ATAS: KELAS BELUM TERKONFIRMASI PADA SESI MENGAJAR BERJALAN */}
               {activeUnconfirmed.length > 0 && (
                 <div className="space-y-1">
                   <div className="flex items-center justify-between px-1 text-[10.5px] font-bold text-rose-800">
                     <span className="flex items-center gap-1">
                       <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse"></span>
-                      <span>Jam Mengajar Berjalan (Jam Ke-{activePeriodNumber}):</span>
+                      <span>Sesi Mengajar Berjalan (Jam Ke-{activePeriodNumber}):</span>
                       <span className="text-[10px] font-mono text-rose-600 font-normal">({activeUnconfirmed.length} Kelas)</span>
                     </span>
                     <span className="text-[9.5px] text-slate-400 font-normal hidden sm:inline">
@@ -354,13 +354,13 @@ export const UnconfirmedClassesSection: React.FC<UnconfirmedClassesSectionProps>
                 </div>
               )}
 
-              {/* BAGIAN BAWAH: KELAS BELUM TERKONFIRMASI PADA JAM MENGAJAR TERLEWAT */}
+              {/* BAGIAN BAWAH: KELAS BELUM TERKONFIRMASI PADA SESI MENGAJAR TERLEWAT */}
               {passedUnconfirmed.length > 0 && (
                 <div className="space-y-1 pt-1 border-t border-slate-200/80">
                   <div className="flex items-center justify-between px-1 text-[10.5px] font-bold text-amber-800">
                     <span className="flex items-center gap-1">
                       <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                      <span>Jam Mengajar Terlewat (Jam Ke-1 s/d {activePeriodNumber - 1}):</span>
+                      <span>Sesi Mengajar Terlewat (Jam Ke-1 s/d {activePeriodNumber - 1}):</span>
                       <span className="text-[10px] font-mono text-amber-700 font-normal">({passedUnconfirmed.length} Kelas)</span>
                     </span>
                     <span className="text-[9.5px] text-slate-400 font-normal hidden sm:inline">

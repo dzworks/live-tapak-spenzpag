@@ -178,9 +178,16 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
     );
   };
 
+  // Lebar proporsional untuk kolom (100% pembagian rata tanpa scrollbar horizontal)
+  const classColWidthPercent = 12; // 12% untuk kolom nama rombel
+  const periodColWidthPercent = currentSchedules.length > 0
+    ? (100 - classColWidthPercent) / currentSchedules.length
+    : 10;
+
   // Kalkulasi posisi % Garis Vertikal Realtime (Merah Bercahaya)
+  // Menjamin 100% sinkron dengan kolom jam aktif (sorotan hijau)
   const realtimeLinePercent = useMemo(() => {
-    if (!wibTimeStr || currentSchedules.length === 0) return null;
+    if (!wibTimeStr || currentSchedules.length === 0 || isWeekend) return null;
     const nowM = timeStringToMinutes(wibTimeStr);
     if (nowM === null) return null;
 
@@ -191,23 +198,36 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
     const startM = timeStringToMinutes(firstPeriod.startTime) ?? 420;
     const endM = timeStringToMinutes(lastPeriod.endTime) ?? 930;
 
-    const classColPercent = 10;
-    const periodColPercent = (100 - classColPercent) / totalPeriods;
-
-    for (let i = 0; i < totalPeriods; i++) {
-      const p = currentSchedules[i];
-      const pStart = timeStringToMinutes(p.startTime) ?? (startM + i * 40);
-      const pEnd = timeStringToMinutes(p.endTime) ?? (pStart + 40);
-
-      if (nowM >= pStart && nowM <= pEnd) {
-        const frac = (nowM - pStart) / Math.max(1, pEnd - pStart);
-        return classColPercent + i * periodColPercent + frac * periodColPercent;
-      }
+    // Prioritas 1: Sinkronisasi 100% dengan kolom jam aktif saat ini (yang ber-sorotan hijau)
+    let targetIndex = -1;
+    if (activePeriodNumber > 0) {
+      targetIndex = currentSchedules.findIndex(p => p.period === activePeriodNumber);
     }
 
-    if (nowM < startM) return classColPercent;
+    // Prioritas 2: Jika activePeriodNumber belum terdeteksi, cari dari jam nowM
+    if (targetIndex === -1) {
+      targetIndex = currentSchedules.findIndex(p => {
+        const pStart = timeStringToMinutes(p.startTime) ?? 0;
+        const pEnd = timeStringToMinutes(p.endTime) ?? 0;
+        return nowM >= pStart && nowM <= pEnd;
+      });
+    }
+
+    if (targetIndex !== -1) {
+      const p = currentSchedules[targetIndex];
+      const pStart = timeStringToMinutes(p.startTime) ?? (startM + targetIndex * 40);
+      const pEnd = timeStringToMinutes(p.endTime) ?? (pStart + 40);
+      const duration = Math.max(1, pEnd - pStart);
+      const frac = Math.min(1, Math.max(0, (nowM - pStart) / duration));
+      return classColWidthPercent + targetIndex * periodColWidthPercent + frac * periodColWidthPercent;
+    }
+
+    // Jika waktu sebelum jam KBM pertama
+    if (nowM < startM) return classColWidthPercent;
+    // Jika waktu setelah jam KBM terakhir
     if (nowM > endM) return 100;
 
+    // Jika tepat di jeda istirahat antar jam KBM
     for (let i = 0; i < totalPeriods - 1; i++) {
       const pCurr = currentSchedules[i];
       const pNext = currentSchedules[i + 1];
@@ -216,12 +236,12 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
 
       if (nowM > currEnd && nowM < nextStart) {
         const frac = (nowM - currEnd) / Math.max(1, nextStart - currEnd);
-        return classColPercent + (i + 1) * periodColPercent + (frac * 0.2 - 0.1) * periodColPercent;
+        return classColWidthPercent + (i + 1) * periodColWidthPercent + (frac * 0.2 - 0.1) * periodColWidthPercent;
       }
     }
 
     return null;
-  }, [wibTimeStr, currentSchedules]);
+  }, [wibTimeStr, currentSchedules, isWeekend, activePeriodNumber, classColWidthPercent, periodColWidthPercent]);
 
   // Status detail per kelas untuk jam aktif saat ini & rekapan hari ini
   const classStatusMap = useMemo(() => {
@@ -454,12 +474,6 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
       window.removeEventListener('resize', updatePosition);
     };
   }, [activePeriodNumber, activeSchedule, isUltraCompact, isWeekend, selectedDate]);
-
-  // Lebar proporsional untuk kolom (100% pembagian rata tanpa scrollbar horizontal)
-  const classColWidthPercent = 12; // 12% untuk kolom nama rombel
-  const periodColWidthPercent = currentSchedules.length > 0
-    ? (100 - classColWidthPercent) / currentSchedules.length
-    : 10;
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs mb-4">
@@ -731,52 +745,53 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                         </div>
                       </div>
 
-                      <div className={`relative w-full ${activeFullscreen ? 'overflow-x-hidden' : 'overflow-x-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100 overscroll-x-contain'}`}>
-                        {/* Garis Vertikal Realtime (Merah Bercahaya) */}
-                        {realtimeLinePercent !== null && (
-                          <div 
-                            style={{ left: `${realtimeLinePercent}%` }}
-                            className="absolute top-0 bottom-0 w-0.5 bg-rose-500 shadow-[0_0_12px_rgba(244,63,94,1)] z-30 pointer-events-none transition-all duration-1000 ease-linear"
-                          >
-                            <div className="sticky top-0.5 -translate-x-1/2 z-40 bg-rose-600 text-white font-mono font-bold text-[8.5px] px-1.5 py-0.2 rounded-full shadow-md flex items-center gap-1 whitespace-nowrap animate-pulse border border-white/50">
-                              <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
-                              <span>{extractCleanTime(wibTimeStr)} WIB</span>
+                      <div className={`w-full ${activeFullscreen || showDualColumn ? 'overflow-x-hidden' : 'overflow-x-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100 overscroll-x-contain'}`}>
+                        <div className={`relative w-full ${activeFullscreen || showDualColumn ? '' : 'min-w-[760px] md:min-w-[820px]'}`}>
+                          {/* Garis Vertikal Realtime (Merah Bercahaya) */}
+                          {realtimeLinePercent !== null && (
+                            <div 
+                              style={{ left: `${realtimeLinePercent}%` }}
+                              className="absolute top-0 bottom-0 w-0.5 bg-rose-500 shadow-[0_0_12px_rgba(244,63,94,1)] z-30 pointer-events-none transition-all duration-1000 ease-linear"
+                            >
+                              <div className="sticky top-0.5 -translate-x-1/2 z-40 bg-rose-600 text-white font-mono font-bold text-[8.5px] px-1.5 py-0.2 rounded-full shadow-md flex items-center gap-1 whitespace-nowrap animate-pulse border border-white/50">
+                                <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
+                                <span>{extractCleanTime(wibTimeStr)} WIB</span>
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          )}
 
-                        <table className={`table-fixed w-full text-left border-collapse ${activeFullscreen ? '' : 'min-w-[760px] md:min-w-[820px]'}`}>
-                          <thead>
-                            <tr className="bg-slate-100/90 border-b border-slate-200 text-slate-700 text-xs font-semibold">
-                              <th 
-                                style={{ 
-                                  width: `${classColWidthPercent}%`, 
-                                  minWidth: activeFullscreen ? undefined : '78px', 
-                                  maxWidth: activeFullscreen ? undefined : '100px' 
-                                }}
-                                className="sticky left-0 z-30 py-2 px-2.5 bg-slate-100 border-r border-slate-300/80 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.08)] select-none"
-                              >
-                                <div className="leading-tight">
-                                  <span className="block font-bold text-slate-800">Kelas</span>
-                                  <span className="text-[10px] text-slate-500 font-mono font-normal">
-                                    {classList.length} Rombel
-                                  </span>
-                                </div>
-                              </th>
-                              {currentSchedules.map(schedule => {
-                                const isCurrent = schedule.period === activePeriodNumber;
-                                return (
-                                  <th
-                                    key={schedule.period}
-                                    data-period={schedule.period}
-                                    style={{ 
-                                      width: `${periodColWidthPercent}%`, 
-                                      minWidth: activeFullscreen ? undefined : (isUltraCompact ? '64px' : '78px') 
-                                    }}
-                                    className={`py-1.5 px-1.5 text-center border-r border-slate-200 last:border-r-0 transition-colors ${
-                                      isCurrent ? 'bg-emerald-100/70 text-emerald-950 font-bold ring-1 ring-inset ring-emerald-500/40' : 'bg-slate-100/90'
-                                    }`}
-                                  >
+                          <table className="table-fixed w-full text-left border-collapse">
+                            <thead>
+                              <tr className="bg-slate-100/90 border-b border-slate-200 text-slate-700 text-xs font-semibold">
+                                <th 
+                                  style={{ 
+                                    width: `${classColWidthPercent}%`, 
+                                    minWidth: (activeFullscreen || showDualColumn) ? undefined : '78px', 
+                                    maxWidth: (activeFullscreen || showDualColumn) ? undefined : '100px' 
+                                  }}
+                                  className="sticky left-0 z-30 py-2 px-2.5 bg-slate-100 border-r border-slate-300/80 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.08)] select-none"
+                                >
+                                  <div className="leading-tight">
+                                    <span className="block font-bold text-slate-800">Kelas</span>
+                                    <span className="text-[10px] text-slate-500 font-mono font-normal">
+                                      {classList.length} Rombel
+                                    </span>
+                                  </div>
+                                </th>
+                                {currentSchedules.map(schedule => {
+                                  const isCurrent = schedule.period === activePeriodNumber;
+                                  return (
+                                    <th
+                                      key={schedule.period}
+                                      data-period={schedule.period}
+                                      style={{ 
+                                        width: `${periodColWidthPercent}%`, 
+                                        minWidth: (activeFullscreen || showDualColumn) ? undefined : (isUltraCompact ? '64px' : '78px') 
+                                      }}
+                                      className={`py-1.5 px-1.5 text-center border-r border-slate-200 last:border-r-0 transition-colors ${
+                                        isCurrent ? 'bg-emerald-100/70 text-emerald-950 font-bold ring-1 ring-inset ring-emerald-500/40' : 'bg-slate-100/90'
+                                      }`}
+                                    >
                                     <div className="flex flex-col items-center leading-tight">
                                       <div className="flex items-center justify-center gap-1">
                                         <span className="truncate font-bold text-xs">{schedule.label}</span>
@@ -802,6 +817,7 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                               </tr>
                             ) : (
                               classList.map(cls => {
+                                const shortName = cls.namaKelas.replace(/^Kelas\s+/i, '').trim();
                                 const cells: React.ReactNode[] = [];
                                 let skipPeriods = 0;
                                 const totalPeriods = currentSchedules.length;
@@ -856,7 +872,7 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                                         colSpan={span}
                                         style={{ 
                                           width: `${periodColWidthPercent * span}%`,
-                                          minWidth: isUltraCompact ? `${64 * span}px` : `${78 * span}px`
+                                          minWidth: (activeFullscreen || showDualColumn) ? undefined : (isUltraCompact ? `${64 * span}px` : `${78 * span}px`)
                                         }}
                                         className={`border-r border-slate-200 last:border-r-0 align-middle ${
                                           isUltraCompact ? 'p-0.5' : 'p-1.5'
@@ -867,46 +883,35 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                                           title={`${slot.subject?.namaMapel || schedule.kodeMapel}\nGuru: ${slot.teacher?.namaLengkap || schedule.kodeGuru}\nRuang: ${slot.activeRoom}\nStatus: ${slot.statusLabel}${timeMarker ? `\nWaktu Absen: ${timeMarker.formattedDisplay} (Jadwal: ${timeMarker.startTime} - ${timeMarker.endTime})` : ''}`}
                                           className={`rounded cursor-pointer transition-all border text-left flex ${
                                             isUltraCompact 
-                                              ? 'px-1.5 py-0.5 min-h-[30px] leading-tight flex-col justify-between' 
+                                              ? 'px-1 py-0.5 min-h-[30px] leading-tight flex-col justify-between' 
                                               : 'p-2 min-h-[72px] flex-col justify-between'
                                           } ${colorStyle}`}
                                         >
                                           {isUltraCompact ? (
                                             <div className="w-full flex flex-col justify-between h-full">
+                                              {/* Baris 1: Kode Guru & Kode Mapel (KIRI, tidak boleh terhalangi) + Ruang & Status Dot (KANAN) */}
                                               <div className="flex items-center justify-between gap-1 w-full">
-                                                <div className="flex items-center gap-1 min-w-0">
-                                                  <span className="font-mono font-bold text-[9px] bg-black/5 px-1 py-0.2 rounded shrink-0">
+                                                <div className="flex items-center gap-1 shrink-0">
+                                                  <span className="font-mono font-black text-[9.5px] bg-black/10 px-1 py-0.2 rounded shrink-0 text-slate-900 shadow-2xs">
                                                     {schedule.kodeGuru}
                                                   </span>
-                                                  <span className="font-semibold text-[10px] font-mono truncate" title={slot.subject?.namaMapel || schedule.kodeMapel}>
+                                                  <span className="font-semibold text-[10px] font-mono truncate max-w-[34px] sm:max-w-[44px]" title={slot.subject?.namaMapel || schedule.kodeMapel}>
                                                     {schedule.kodeMapel}
                                                   </span>
                                                 </div>
 
-                                                <div className="flex items-center gap-1 shrink-0 ml-1">
-                                                  {timeMarker && (
-                                                    <span 
-                                                      className={`text-[9px] font-mono font-bold px-1 py-0.2 rounded border flex items-center gap-0.5 shrink-0 ${
-                                                        slot.statusColor === 'blue'
-                                                          ? 'text-sky-800 bg-sky-100/90 border-sky-300/80'
-                                                          : 'text-emerald-800 bg-emerald-100/90 border-emerald-300/80'
-                                                      }`}
-                                                      title={`Waktu Absen: ${timeMarker.formattedDisplay} (Jadwal: ${timeMarker.startTime} - ${timeMarker.endTime})`}
-                                                    >
-                                                      🕒 {timeMarker.absenTime}
-                                                    </span>
-                                                  )}
-                                                  <span className="text-[9px] font-mono opacity-80 truncate max-w-[50px]" title={slot.activeRoom}>
+                                                <div className="flex items-center gap-1 shrink-0 ml-auto">
+                                                  <span className="text-[8.5px] font-mono opacity-80 truncate max-w-[32px] sm:max-w-[42px]" title={slot.activeRoom}>
                                                     {slot.activeRoom}
                                                   </span>
                                                   {slot.statusColor === 'green' && (
-                                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0" title="Hadir (Kelas)"></span>
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0 shadow-2xs" title="Hadir (Kelas)"></span>
                                                   )}
                                                   {slot.statusColor === 'blue' && (
-                                                    <span className="w-1.5 h-1.5 rounded-full bg-sky-600 shrink-0" title="Hadir (Luar Kelas)"></span>
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-sky-600 shrink-0 shadow-2xs" title="Hadir (Luar Kelas)"></span>
                                                   )}
                                                   {slot.statusColor === 'red' && (
-                                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse shrink-0" title="Belum Terisi"></span>
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse shrink-0 shadow-2xs" title="Belum Terisi"></span>
                                                   )}
                                                   {slot.statusColor === 'purple' && (
                                                     <span className="text-[8px] font-bold text-purple-700 bg-purple-100 px-0.5 rounded shrink-0">
@@ -921,12 +926,24 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                                                 </div>
                                               </div>
 
-                                              {/* Garis Waktu Presensi KBM Dual-Color (Mini Timeline) */}
+                                              {/* Baris 2: Timestamp Waktu Absen & Garis Waktu Mini (TIDAK MENUTUPI KODE GURU) */}
                                               {timeMarker && !(slot.statusColor === 'yellow' && timeMarker.isEarly) && (
                                                 <div 
-                                                  className="w-full mt-1 pt-0.5 border-t border-black/5 relative"
+                                                  className="w-full mt-0.5 pt-0.5 border-t border-black/5 flex flex-col gap-0.5"
                                                   title={`Garis Waktu KBM: ${timeMarker.startTime} s/d ${timeMarker.endTime} WIB\nPresensi Masuk: ${timeMarker.formattedDisplay}`}
                                                 >
+                                                  <div className="flex items-center justify-between text-[7.5px] font-mono leading-none">
+                                                    <span className={`font-bold px-1 py-0.2 rounded border flex items-center gap-0.5 ${
+                                                      slot.statusColor === 'blue'
+                                                        ? 'text-sky-900 bg-sky-100 border-sky-300'
+                                                        : 'text-emerald-900 bg-emerald-100 border-emerald-300'
+                                                    }`}>
+                                                      🕒 {timeMarker.absenTime}
+                                                    </span>
+                                                    <span className="text-slate-500 font-normal">
+                                                      {timeMarker.startTime}-{timeMarker.endTime}
+                                                    </span>
+                                                  </div>
                                                   <div className={`h-1.5 w-full ${
                                                     slot.statusColor === 'yellow' 
                                                       ? 'bg-amber-400' 
@@ -942,7 +959,7 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                                                       className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 flex items-center justify-center"
                                                       style={{ left: `${timeMarker.percentage}%` }}
                                                     >
-                                                      <span className="relative flex h-3 w-3 items-center justify-center">
+                                                      <span className="relative flex h-2.5 w-2.5 items-center justify-center">
                                                         <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${
                                                           slot.statusColor === 'yellow' 
                                                             ? 'bg-amber-400' 
@@ -950,7 +967,7 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                                                             ? 'bg-sky-400' 
                                                             : 'bg-emerald-400'
                                                         } opacity-75`}></span>
-                                                        <span className={`relative inline-flex rounded-full h-2 w-2 ${
+                                                        <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${
                                                           slot.statusColor === 'yellow' 
                                                             ? 'bg-amber-700' 
                                                             : slot.statusColor === 'blue' 
@@ -1025,33 +1042,36 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                                                         <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${
                                                           slot.statusColor === 'yellow' 
                                                             ? 'bg-amber-400' 
-                                                            : slot.statusColor === 'blue'
-                                                            ? 'bg-sky-400'
+                                                            : slot.statusColor === 'blue' 
+                                                            ? 'bg-sky-400' 
                                                             : 'bg-emerald-400'
                                                         } opacity-75`}></span>
-                                                        <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
+                                                        <span className={`relative inline-flex rounded-full h-2 w-2 ${
                                                           slot.statusColor === 'yellow' 
                                                             ? 'bg-amber-700' 
-                                                            : slot.statusColor === 'blue'
-                                                            ? 'bg-sky-700'
+                                                            : slot.statusColor === 'blue' 
+                                                            ? 'bg-sky-700' 
                                                             : 'bg-emerald-700'
-                                                        } ring-2 ring-white shadow-xs`}></span>
+                                                        } ring-1 ring-white shadow-2xs`}></span>
                                                       </span>
                                                     </div>
                                                   </div>
                                                 </div>
                                               )}
 
-                                              <div className="w-full pt-1 border-t border-black/5 flex items-center justify-between text-[9px] text-slate-500 font-mono">
-                                                <span className="truncate max-w-[100px]">{slot.activeRoom}</span>
-                                                <span className={
-                                                  slot.statusColor === 'green' ? 'text-emerald-700 font-bold' :
-                                                  slot.statusColor === 'blue' ? 'text-sky-700 font-bold' :
-                                                  slot.statusColor === 'red' ? 'text-rose-700 font-bold' :
-                                                  slot.statusColor === 'purple' ? 'text-purple-700 font-bold' :
-                                                  'text-amber-700 font-bold'
-                                                }>
-                                                  {slot.statusColor === 'green' ? 'Hadir' :
+                                              {/* Status Keterangan Kehadiran */}
+                                              <div className="flex items-center justify-between text-[10px] mt-1 pt-1 border-t border-slate-200/60">
+                                                <span className="truncate text-slate-500 font-medium">
+                                                  {slot.activeRoom}
+                                                </span>
+                                                <span className={`px-1.5 py-0.2 rounded font-bold font-mono text-[9px] ${
+                                                  slot.statusColor === 'green' ? 'bg-emerald-100 text-emerald-800' :
+                                                  slot.statusColor === 'blue' ? 'bg-sky-100 text-sky-800' :
+                                                  slot.statusColor === 'red' ? 'bg-rose-100 text-rose-800 animate-pulse' :
+                                                  slot.statusColor === 'purple' ? 'bg-purple-100 text-purple-800' :
+                                                  'bg-amber-100 text-amber-800'
+                                                }`}>
+                                                  {slot.statusColor === 'green' ? 'Hadir (Kelas)' :
                                                    slot.statusColor === 'blue' ? 'Hadir (Luar Kelas)' :
                                                    slot.statusColor === 'red' ? 'Belum Absen' :
                                                    slot.statusColor === 'purple' ? 'Guru Infal' :
@@ -1074,7 +1094,7 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                                         key={`slot-${cls.idKelas}-${period}`}
                                         style={{ 
                                           width: `${periodColWidthPercent}%`,
-                                          minWidth: isUltraCompact ? '64px' : '78px'
+                                          minWidth: (activeFullscreen || showDualColumn) ? undefined : (isUltraCompact ? '64px' : '78px')
                                         }}
                                         className={`border-r border-slate-200 last:border-r-0 align-middle ${
                                           isUltraCompact ? 'p-0.5' : 'p-1.5'
@@ -1092,11 +1112,10 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                                   }
                                 }
 
-                                const shortName = cls.namaKelas.replace(/^Kelas\s+/i, '');
                                 const isHighlighted = Boolean(
                                   highlightedClassName && (
-                                    normalizeClassName(cls.namaKelas) === normalizeClassName(highlightedClassName) ||
-                                    cls.namaKelas === highlightedClassName
+                                    normalizeClassName(highlightedClassName) === normalizeClassName(cls.namaKelas) ||
+                                    highlightedClassName === cls.namaKelas
                                   )
                                 );
                                 const isRecentlyUpdated = Boolean(
@@ -1122,8 +1141,8 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                                     <td 
                                       style={{ 
                                         width: `${classColWidthPercent}%`,
-                                        minWidth: '78px',
-                                        maxWidth: '100px'
+                                        minWidth: (activeFullscreen || showDualColumn) ? undefined : '78px',
+                                        maxWidth: (activeFullscreen || showDualColumn) ? undefined : '100px'
                                       }}
                                       className={`sticky left-0 z-20 px-2.5 border-r border-slate-300/80 font-medium py-1 transition-colors shadow-[2px_0_6px_-2px_rgba(0,0,0,0.08)] ${
                                         isHighlighted 
@@ -1152,10 +1171,11 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                         </table>
                       </div>
                     </div>
-                  );
-                };
+                  </div>
+                );
+              };
 
-                return showDualColumn ? (
+              return showDualColumn ? (
                   <div className={`grid gap-3.5 items-start w-full ${
                     activeFullscreen ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1 xl:grid-cols-2'
                   }`}>

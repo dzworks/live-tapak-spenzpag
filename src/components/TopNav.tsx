@@ -1,6 +1,6 @@
 import React from 'react';
-import { ViewTab } from '../types';
-import { LayoutGrid, ListFilter, RefreshCw, Tv, Wifi, ShieldCheck } from 'lucide-react';
+import { ViewTab, AdminSession } from '../types';
+import { LayoutGrid, ListFilter, RefreshCw, Tv, Wifi, ShieldCheck, LogOut } from 'lucide-react';
 
 interface TopNavProps {
   currentTab: ViewTab;
@@ -13,6 +13,8 @@ interface TopNavProps {
   onToggleFullscreen?: () => void;
   isFullscreen?: boolean;
   onOpenAdminModal?: () => void;
+  adminSession?: AdminSession | null;
+  onLogout?: () => void;
 }
 
 export const TopNav: React.FC<TopNavProps> = ({
@@ -26,6 +28,8 @@ export const TopNav: React.FC<TopNavProps> = ({
   onToggleFullscreen,
   isFullscreen,
   onOpenAdminModal,
+  adminSession,
+  onLogout,
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-slate-900 border-b border-slate-800 text-slate-100">
@@ -113,16 +117,44 @@ export const TopNav: React.FC<TopNavProps> = ({
               </button>
             )}
 
-            {/* Admin PIN-Protected URL Config Button */}
+            {/* Admin Profile Badge / Login Button */}
             {onOpenAdminModal && (
-              <button
-                onClick={onOpenAdminModal}
-                title="Konfigurasi URL Backend Apps Script (Dilindungi PIN Pengawas)"
-                className="p-1.5 text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors cursor-pointer flex items-center gap-1"
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="hidden xl:inline text-[11px] font-medium text-slate-300">Admin</span>
-              </button>
+              adminSession ? (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={onOpenAdminModal}
+                    title={`Admin Aktif: ${adminSession.nama} (${adminSession.role || adminSession.jabatan}) - Klik untuk Pengaturan`}
+                    className="flex items-center gap-1.5 px-2.5 py-1 text-slate-200 hover:text-white bg-slate-800 hover:bg-slate-700/90 rounded-lg border border-emerald-500/50 shadow-xs transition-colors cursor-pointer"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <span className="hidden xl:inline text-[11px] font-semibold max-w-[120px] truncate text-slate-100">
+                      {adminSession.nama}
+                    </span>
+                    <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-1.5 py-0.2 rounded border border-emerald-500/40">
+                      {adminSession.role || 'Admin'}
+                    </span>
+                  </button>
+
+                  {onLogout && (
+                    <button
+                      onClick={onLogout}
+                      title="Keluar / Logout Sesi Admin"
+                      className="p-1.5 text-slate-400 hover:text-rose-300 hover:bg-rose-950/40 rounded-lg border border-slate-700 transition-colors cursor-pointer"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <button
+                  onClick={onOpenAdminModal}
+                  title="Login Administrator Sheet MasterLogin"
+                  className="p-1.5 sm:px-2.5 sm:py-1 text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="hidden sm:inline text-[11px] font-medium text-slate-300">Login Admin</span>
+                </button>
+              )
             )}
 
             {/* Refresh Button */}
@@ -154,10 +186,12 @@ export const TopNav: React.FC<TopNavProps> = ({
           {onOpenAdminModal && (
             <button
               onClick={onOpenAdminModal}
-              className="px-2 py-0.5 rounded text-emerald-400 flex items-center gap-1 cursor-pointer"
+              className={`px-2 py-0.5 rounded flex items-center gap-1 cursor-pointer ${
+                adminSession ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+              }`}
             >
               <ShieldCheck className="w-3 h-3" />
-              <span>Admin</span>
+              <span>{adminSession ? (adminSession.role || 'Admin') : 'Admin'}</span>
             </button>
           )}
         </div>

@@ -12,7 +12,9 @@ import {
   ScheduleItem, 
   AttendanceLogItem, 
   ResolvedScheduleSlot, 
-  ViewTab 
+  ViewTab,
+  MasterLoginAccount,
+  AdminSession
 } from './types';
 import { CONFIG } from './config';
 import { 
@@ -22,6 +24,7 @@ import {
   DEFAULT_MASTER_RUANGAN,
   DEFAULT_SCHEDULES,
   DEFAULT_ATTENDANCE_LOGS,
+  DEFAULT_MASTER_LOGIN,
   getScheduleForDate, 
   getDayLabel, 
   getDayType 
@@ -83,6 +86,40 @@ export default function App() {
     const saved = localStorage.getItem('gurulive_tapak_logs_v2');
     return saved ? JSON.parse(saved) : DEFAULT_ATTENDANCE_LOGS;
   });
+
+  // Database Akun MasterLogin dari Google Spreadsheet
+  const [masterLogin, setMasterLogin] = useState<MasterLoginAccount[]>(() => {
+    try {
+      const saved = localStorage.getItem('gurulive_tapak_login_v2');
+      return saved ? JSON.parse(saved) : DEFAULT_MASTER_LOGIN;
+    } catch {
+      return DEFAULT_MASTER_LOGIN;
+    }
+  });
+
+  // Sesi Login Admin Aktif (Persisten di localStorage)
+  const [adminSession, setAdminSession] = useState<AdminSession | null>(() => {
+    try {
+      const saved = localStorage.getItem('gurulive_admin_session');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const handleLoginSuccess = useCallback((session: AdminSession) => {
+    setAdminSession(session);
+    try {
+      localStorage.setItem('gurulive_admin_session', JSON.stringify(session));
+    } catch {}
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    setAdminSession(null);
+    try {
+      localStorage.removeItem('gurulive_admin_session');
+    } catch {}
+  }, []);
 
   // 2. UI State & Density Mode (Ultra-Compact 23 Kelas default)
   const [currentTab, setCurrentTab] = useState<ViewTab>('matrix');
@@ -164,7 +201,8 @@ export default function App() {
     localStorage.setItem('gurulive_tapak_ruangan_v2', JSON.stringify(masterRuangan));
     localStorage.setItem('gurulive_tapak_schedules_v2', JSON.stringify(schedules));
     localStorage.setItem('gurulive_tapak_logs_v2', JSON.stringify(attendanceLogs));
-  }, [masterGuru, masterMapel, classes, masterRuangan, schedules, attendanceLogs]);
+    localStorage.setItem('gurulive_tapak_login_v2', JSON.stringify(masterLogin));
+  }, [masterGuru, masterMapel, classes, masterRuangan, schedules, attendanceLogs, masterLogin]);
 
   // Live Clock updater: Menghitung waktu WIB dan jam pelajaran KBM aktif setiap detik secara real-time
   useEffect(() => {
@@ -298,10 +336,16 @@ export default function App() {
           // Selalu prioritaskan tanggal hari ini (WIB) saat reload spreadsheet/database
           const todayWIB = getTodayWIBDisplayDate();
           setSelectedDate(todayWIB);
+
+          // Sinkronkan akun MasterLogin dari spreadsheet
+          if (bundle.masterLogin && Array.isArray(bundle.masterLogin) && bundle.masterLogin.length > 0) {
+            setMasterLogin(bundle.masterLogin);
+          }
         }
 
         setIsLiveConnected(true);
-        setSyncMessage(`Sinkronisasi 6 Sheet Sukses: ${bundle.classes.length} Kelas, ${bundle.schedules.length} Jadwal, ${bundle.attendanceLogs.length} Log Presensi.`);
+        const loginCount = bundle.masterLogin?.length || 0;
+        setSyncMessage(`Sinkronisasi Sheet Sukses: ${bundle.classes.length} Kelas, ${bundle.schedules.length} Jadwal, ${bundle.attendanceLogs.length} Log Presensi, ${loginCount} Akun Admin.`);
       } else {
         throw new Error(json.message || 'Format data dari Apps Script tidak sesuai skema TAPAK.');
       }
@@ -521,6 +565,8 @@ export default function App() {
         onToggleFullscreen={handleToggleFullscreen}
         isFullscreen={isFullscreen}
         onOpenAdminModal={() => setIsAdminModalOpen(true)}
+        adminSession={adminSession}
+        onLogout={handleLogout}
       />
 
       {/* 2. Main Content Container */}
@@ -721,12 +767,16 @@ export default function App() {
         onClose={() => setSelectedSlot(null)}
       />
 
-      {/* 7. Admin / Pengawas PIN-Protected Apps Script URL Configuration Modal */}
+      {/* 7. Admin / Pengawas Sheet MasterLogin Configuration Modal */}
       <AdminUrlModal
         isOpen={isAdminModalOpen}
         onClose={() => setIsAdminModalOpen(false)}
         currentUrl={appsScriptUrl}
         onUrlUpdated={handleUrlUpdated}
+        masterLoginAccounts={masterLogin}
+        adminSession={adminSession}
+        onLoginSuccess={handleLoginSuccess}
+        onLogout={handleLogout}
       />
 
       {/* 8. Sistem Alert Visual (Toast) Presensi Masuk Real-Time */}
