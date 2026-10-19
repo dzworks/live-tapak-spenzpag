@@ -18,9 +18,10 @@ import {
   getDayNameIndonesian, 
   resolveScheduleSlot,
   normalizeClassName,
-  isSameDate
+  isSameDate,
+  isSampleEntity
 } from '../utils/appsScriptCode';
-import { calculateSlotTimeMarker } from '../utils/timeMarker';
+import { calculateSlotTimeMarker, timeStringToMinutes, extractCleanTime } from '../utils/timeMarker';
 import { 
   Search,
   Maximize2,
@@ -33,7 +34,9 @@ import {
   UserCheck,
   ArrowUpDown,
   X,
-  BellRing
+  BellRing,
+  Columns,
+  LayoutGrid
 } from 'lucide-react';
 
 interface ClassroomMatrixProps {
@@ -53,6 +56,7 @@ interface ClassroomMatrixProps {
   recentlyUpdatedClasses?: string[];
   selectedGrade?: 'all' | 'VII' | 'VIII' | 'IX';
   onSelectGrade?: (grade: 'all' | 'VII' | 'VIII' | 'IX') => void;
+  isFullscreen?: boolean;
 }
 
 export type SortOption = 'default' | 'unattended-first' | 'name-asc' | 'room';
@@ -74,6 +78,7 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
   recentlyUpdatedClasses,
   selectedGrade: propSelectedGrade,
   onSelectGrade,
+  isFullscreen: propIsFullscreen = false,
 }) => {
   const [internalSelectedGrade, setInternalSelectedGrade] = useState<'all' | 'VII' | 'VIII' | 'IX'>('all');
   const selectedGrade = propSelectedGrade !== undefined ? propSelectedGrade : internalSelectedGrade;
@@ -134,6 +139,29 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
   const tableRef = useRef<HTMLTableElement | null>(null);
   const [indicatorOffsetLeft, setIndicatorOffsetLeft] = useState<number | null>(null);
 
+  // Mode tata letak: 'auto' (1 kolom di tablet/laptop kecil, 2 kolom di layar >= 1280px atau full screen), '1col', atau '2col'
+  const [layoutMode, setLayoutMode] = useState<'auto' | '1col' | '2col'>('auto');
+  const [isWideScreen, setIsWideScreen] = useState(false);
+  const [isFullscreenState, setIsFullscreenState] = useState(false);
+
+  useEffect(() => {
+    const checkWidth = () => {
+      setIsWideScreen(typeof window !== 'undefined' && window.innerWidth >= 1280);
+      setIsFullscreenState(typeof document !== 'undefined' && !!document.fullscreenElement);
+    };
+    checkWidth();
+    window.addEventListener('resize', checkWidth);
+    document.addEventListener('fullscreenchange', checkWidth);
+    return () => {
+      window.removeEventListener('resize', checkWidth);
+      document.removeEventListener('fullscreenchange', checkWidth);
+    };
+  }, []);
+
+  const activeFullscreen = propIsFullscreen || isFullscreenState || (typeof document !== 'undefined' && !!document.fullscreenElement);
+
+  const showDualColumn = layoutMode === '2col' || activeFullscreen || (layoutMode === 'auto' && isWideScreen);
+
   // Helper mencari schedule yang MULAI pada jam tertentu untuk kelas tertentu
   const getScheduleStartingAt = (className: string, periodNumber: number) => {
     const normTarget = normalizeClassName(className);
@@ -149,6 +177,51 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
       s => normalizeClassName(s.namaKelas) === normTarget && s.periods.includes(periodNumber)
     );
   };
+
+  // Kalkulasi posisi % Garis Vertikal Realtime (Merah Bercahaya)
+  const realtimeLinePercent = useMemo(() => {
+    if (!wibTimeStr || currentSchedules.length === 0) return null;
+    const nowM = timeStringToMinutes(wibTimeStr);
+    if (nowM === null) return null;
+
+    const totalPeriods = currentSchedules.length;
+    const firstPeriod = currentSchedules[0];
+    const lastPeriod = currentSchedules[totalPeriods - 1];
+
+    const startM = timeStringToMinutes(firstPeriod.startTime) ?? 420;
+    const endM = timeStringToMinutes(lastPeriod.endTime) ?? 930;
+
+    const classColPercent = 10;
+    const periodColPercent = (100 - classColPercent) / totalPeriods;
+
+    for (let i = 0; i < totalPeriods; i++) {
+      const p = currentSchedules[i];
+      const pStart = timeStringToMinutes(p.startTime) ?? (startM + i * 40);
+      const pEnd = timeStringToMinutes(p.endTime) ?? (pStart + 40);
+
+      if (nowM >= pStart && nowM <= pEnd) {
+        const frac = (nowM - pStart) / Math.max(1, pEnd - pStart);
+        return classColPercent + i * periodColPercent + frac * periodColPercent;
+      }
+    }
+
+    if (nowM < startM) return classColPercent;
+    if (nowM > endM) return 100;
+
+    for (let i = 0; i < totalPeriods - 1; i++) {
+      const pCurr = currentSchedules[i];
+      const pNext = currentSchedules[i + 1];
+      const currEnd = timeStringToMinutes(pCurr.endTime) ?? 0;
+      const nextStart = timeStringToMinutes(pNext.startTime) ?? 0;
+
+      if (nowM > currEnd && nowM < nextStart) {
+        const frac = (nowM - currEnd) / Math.max(1, nextStart - currEnd);
+        return classColPercent + (i + 1) * periodColPercent + (frac * 0.2 - 0.1) * periodColPercent;
+      }
+    }
+
+    return null;
+  }, [wibTimeStr, currentSchedules]);
 
   // Status detail per kelas untuk jam aktif saat ini & rekapan hari ini
   const classStatusMap = useMemo(() => {
@@ -178,12 +251,19 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
             activePeriodNumber,
             true
           );
-          if (slot.statusColor === 'red') hasUnattendedToday = true;
+          const isSample = isSampleEntity({
+            kodeGuru: schedule.kodeGuru,
+            namaGuru: slot.teacher?.namaLengkap,
+            kodeMapel: schedule.kodeMapel,
+            namaKelas: cls.namaKelas,
+          });
+
+          if (slot.statusColor === 'red' && !isSample) hasUnattendedToday = true;
           if (slot.statusColor === 'green' || slot.statusColor === 'blue') hasHadirToday = true;
           if (slot.statusColor === 'purple') hasInfalToday = true;
 
           if (p === activePeriodNumber) {
-            activeSlotColor = slot.statusColor;
+            activeSlotColor = (slot.statusColor === 'red' && isSample) ? 'none' : slot.statusColor;
           }
         }
       }
@@ -441,6 +521,20 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
               <span>Jadwal {dayNameIndo} · {dayInfo.label}</span>
             </div>
 
+            {/* Tombol Pengatur Tata Letak Grid Adaptif */}
+            <button
+              onClick={() => {
+                setLayoutMode(prev => (prev === 'auto' ? '1col' : prev === '1col' ? '2col' : 'auto'));
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-white hover:bg-slate-100 text-slate-700 transition-colors border border-slate-300 cursor-pointer shadow-2xs whitespace-nowrap"
+              title="Ganti tata letak matriks (1 Kolom Penuh / 2 Kolom Berdampingan / Adaptif Otomatis)"
+            >
+              {showDualColumn ? <Columns className="w-3.5 h-3.5 text-indigo-600" /> : <LayoutGrid className="w-3.5 h-3.5 text-slate-500" />}
+              <span>
+                {layoutMode === '1col' ? '1 Kolom Penuh' : layoutMode === '2col' ? '2 Kolom' : 'Tata Letak Adaptif'}
+              </span>
+            </button>
+
             {onToggleDensity && (
               <button
                 onClick={onToggleDensity}
@@ -612,36 +706,58 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start w-full">
+            <>
               {(() => {
                 const halfIndex = Math.ceil(processedClasses.length / 2);
                 const leftClasses = processedClasses.slice(0, halfIndex);
                 const rightClasses = processedClasses.slice(halfIndex);
 
-                const renderClassTable = (classList: ClassMaster[], colTitle: string) => {
+                const renderClassTable = (classList: ClassMaster[], colTitle: string, isHalfColumn: boolean = false) => {
                   return (
-                    <div className="flex-1 min-w-[320px] w-full overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-2xs">
+                    <div className="flex-1 w-full overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-2xs">
                       {/* Sub-header Kolom Matriks */}
                       <div className="bg-slate-100/90 px-3 py-1.5 border-b border-slate-200 flex items-center justify-between text-xs font-bold text-slate-800">
                         <span className="flex items-center gap-1.5">
                           <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
                           <span>Matriks {colTitle} ({classList.length} Rombel)</span>
                         </span>
-                        <span className="text-[10px] font-mono text-slate-500 font-normal">
-                          Jam 1 s/d {currentSchedules.length}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-mono text-slate-500 font-normal">
+                            Jam 1 s/d {currentSchedules.length}
+                          </span>
+                          <span className="hidden sm:inline-block text-[10px] text-slate-400 font-normal">
+                            (Gulir horizontal jika diperlukan)
+                          </span>
+                        </div>
                       </div>
 
-                      <div className="w-full overflow-x-auto">
-                        <table className="table-fixed w-full text-left border-collapse">
+                      <div className={`relative w-full ${activeFullscreen ? 'overflow-x-hidden' : 'overflow-x-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100 overscroll-x-contain'}`}>
+                        {/* Garis Vertikal Realtime (Merah Bercahaya) */}
+                        {realtimeLinePercent !== null && (
+                          <div 
+                            style={{ left: `${realtimeLinePercent}%` }}
+                            className="absolute top-0 bottom-0 w-0.5 bg-rose-500 shadow-[0_0_12px_rgba(244,63,94,1)] z-30 pointer-events-none transition-all duration-1000 ease-linear"
+                          >
+                            <div className="sticky top-0.5 -translate-x-1/2 z-40 bg-rose-600 text-white font-mono font-bold text-[8.5px] px-1.5 py-0.2 rounded-full shadow-md flex items-center gap-1 whitespace-nowrap animate-pulse border border-white/50">
+                              <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
+                              <span>{extractCleanTime(wibTimeStr)} WIB</span>
+                            </div>
+                          </div>
+                        )}
+
+                        <table className={`table-fixed w-full text-left border-collapse ${activeFullscreen ? '' : 'min-w-[760px] md:min-w-[820px]'}`}>
                           <thead>
                             <tr className="bg-slate-100/90 border-b border-slate-200 text-slate-700 text-xs font-semibold">
                               <th 
-                                style={{ width: `${classColWidthPercent}%` }}
-                                className="py-2 px-2 bg-slate-100/95 z-10 border-r border-slate-200"
+                                style={{ 
+                                  width: `${classColWidthPercent}%`, 
+                                  minWidth: activeFullscreen ? undefined : '78px', 
+                                  maxWidth: activeFullscreen ? undefined : '100px' 
+                                }}
+                                className="sticky left-0 z-30 py-2 px-2.5 bg-slate-100 border-r border-slate-300/80 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.08)] select-none"
                               >
                                 <div className="leading-tight">
-                                  <span className="block font-bold">Kelas</span>
+                                  <span className="block font-bold text-slate-800">Kelas</span>
                                   <span className="text-[10px] text-slate-500 font-mono font-normal">
                                     {classList.length} Rombel
                                   </span>
@@ -653,19 +769,22 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                                   <th
                                     key={schedule.period}
                                     data-period={schedule.period}
-                                    style={{ width: `${periodColWidthPercent}%` }}
-                                    className={`py-1 px-1 text-center border-r border-slate-200 last:border-r-0 ${
-                                      isCurrent ? 'bg-emerald-50/80 text-emerald-950 font-bold ring-1 ring-emerald-500/30' : ''
+                                    style={{ 
+                                      width: `${periodColWidthPercent}%`, 
+                                      minWidth: activeFullscreen ? undefined : (isUltraCompact ? '64px' : '78px') 
+                                    }}
+                                    className={`py-1.5 px-1.5 text-center border-r border-slate-200 last:border-r-0 transition-colors ${
+                                      isCurrent ? 'bg-emerald-100/70 text-emerald-950 font-bold ring-1 ring-inset ring-emerald-500/40' : 'bg-slate-100/90'
                                     }`}
                                   >
                                     <div className="flex flex-col items-center leading-tight">
                                       <div className="flex items-center justify-center gap-1">
-                                        <span className="truncate">{schedule.label}</span>
+                                        <span className="truncate font-bold text-xs">{schedule.label}</span>
                                         {isCurrent && (
-                                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+                                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse shrink-0" title="Jam Aktif"></span>
                                         )}
                                       </div>
-                                      <span className="text-[9px] font-mono text-slate-500 font-normal tabular-nums truncate">
+                                      <span className="text-[9px] font-mono text-slate-500 font-normal tabular-nums truncate whitespace-nowrap mt-0.5">
                                         {schedule.startTime} - {schedule.endTime}
                                       </span>
                                     </div>
@@ -735,7 +854,10 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                                       <td
                                         key={`slot-${cls.idKelas}-${period}`}
                                         colSpan={span}
-                                        style={{ width: `${periodColWidthPercent * span}%` }}
+                                        style={{ 
+                                          width: `${periodColWidthPercent * span}%`,
+                                          minWidth: isUltraCompact ? `${64 * span}px` : `${78 * span}px`
+                                        }}
                                         className={`border-r border-slate-200 last:border-r-0 align-middle ${
                                           isUltraCompact ? 'p-0.5' : 'p-1.5'
                                         } ${slot.isCoveredNow ? 'bg-slate-50/30' : ''}`}
@@ -950,7 +1072,10 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                                     cells.push(
                                       <td
                                         key={`slot-${cls.idKelas}-${period}`}
-                                        style={{ width: `${periodColWidthPercent}%` }}
+                                        style={{ 
+                                          width: `${periodColWidthPercent}%`,
+                                          minWidth: isUltraCompact ? '64px' : '78px'
+                                        }}
                                         className={`border-r border-slate-200 last:border-r-0 align-middle ${
                                           isUltraCompact ? 'p-0.5' : 'p-1.5'
                                         }`}
@@ -995,8 +1120,12 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                                     }`}
                                   >
                                     <td 
-                                      style={{ width: `${classColWidthPercent}%` }}
-                                      className={`px-2 z-10 border-r border-slate-200 font-medium py-0.5 transition-colors ${
+                                      style={{ 
+                                        width: `${classColWidthPercent}%`,
+                                        minWidth: '78px',
+                                        maxWidth: '100px'
+                                      }}
+                                      className={`sticky left-0 z-20 px-2.5 border-r border-slate-300/80 font-medium py-1 transition-colors shadow-[2px_0_6px_-2px_rgba(0,0,0,0.08)] ${
                                         isHighlighted 
                                           ? 'bg-amber-100 font-black text-indigo-900' 
                                           : isRecentlyUpdated
@@ -1026,14 +1155,20 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                   );
                 };
 
-                return (
-                  <>
-                    {renderClassTable(leftClasses, 'Kiri')}
-                    {renderClassTable(rightClasses, 'Kanan')}
-                  </>
+                return showDualColumn ? (
+                  <div className={`grid gap-3.5 items-start w-full ${
+                    activeFullscreen ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1 xl:grid-cols-2'
+                  }`}>
+                    {renderClassTable(leftClasses, 'Kolom 1', true)}
+                    {renderClassTable(rightClasses, 'Kolom 2', true)}
+                  </div>
+                ) : (
+                  <div className="w-full">
+                    {renderClassTable(processedClasses, 'Seluruh Rombel', false)}
+                  </div>
                 );
               })()}
-            </div>
+            </>
           )}
         </div>
       )}
@@ -1062,8 +1197,8 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
             <span className="font-medium text-purple-950">Ungu: Guru Pengganti (Infal)</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full bg-rose-500"></div>
-            <span>Garis Merah: Jam Aktif Sekarang</span>
+            <div className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></div>
+            <span>Kolom Hijau: Jam Aktif Saat Ini</span>
           </div>
         </div>
 

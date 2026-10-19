@@ -453,68 +453,65 @@ export const ExecutiveInfographic: React.FC<ExecutiveInfographicProps> = ({
     : '07:00 - 14:00';
 
   return (
-    <div className="mb-3 rounded-2xl bg-white border border-slate-200/90 shadow-2xs overflow-hidden transition-all">
-      {/* 1. KOTAK ATAS: Jam Ke (Besar di Baris 1), Durasi dan Realtime di Baris 2 + Toggle Ciutkan */}
-      <div className="px-3 sm:px-4 py-2.5 sm:py-3 bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 text-white border-b border-slate-800 shadow-xs">
-        {/* BARIS 1: Jam Ke Ukuran Lebih Besar & Menonjol + Status KBM + Toggle */}
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
-            <span className="text-base sm:text-xl md:text-2xl font-black font-mono tracking-tight text-white flex items-center gap-2">
-              <span className="bg-gradient-to-r from-indigo-600 to-indigo-500 text-white px-3 sm:px-4 py-1 rounded-xl shadow-md border border-indigo-400/50">
+    <div className="mb-2 rounded-xl bg-white border border-slate-200/90 shadow-2xs overflow-hidden transition-all">
+      {/* 1. KOTAK ATAS: Jam Ke (Besar) + Durasi + Realtime + Ciutkan dalam Satu Baris Streamlined */}
+      <div className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 text-white border-b border-slate-800 shadow-xs">
+        <div className="flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap min-w-0">
+            {/* 1. Jam Ke (Ukuran Tetap Besar & Menonjol) */}
+            <span className="text-base sm:text-lg md:text-xl font-black font-mono tracking-tight text-white flex items-center gap-1.5 shrink-0">
+              <span className="bg-gradient-to-r from-indigo-600 to-indigo-500 text-white px-2.5 sm:px-3 py-0.5 rounded-lg shadow-sm border border-indigo-400/50">
                 {isWeekend ? 'AKHIR PEKAN' : `Jam ke-${activePeriodNumber}`}
               </span>
             </span>
 
+            {/* 2. Durasi Waktu Jam KBM */}
+            <div className="flex items-center gap-1 bg-slate-900/90 text-slate-200 px-2 py-0.5 rounded-md border border-slate-800 font-mono text-xs font-semibold tracking-tight shadow-inner shrink-0">
+              <Clock className="w-3 h-3 text-indigo-400 shrink-0" />
+              <span className="text-slate-400 text-[10px] font-normal hidden sm:inline">Durasi:</span>
+              <span>{isWeekend ? 'Hari Libur' : timeRangeText} WIB</span>
+            </div>
+
+            <span className="text-slate-600 hidden min-[400px]:inline text-xs">·</span>
+
+            {/* 3. Jam Realtime WIB Digital */}
+            <div className="flex items-center gap-1.5 bg-slate-950/90 px-2.5 py-0.5 rounded-md border border-emerald-500/40 shadow-inner shrink-0">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span className="text-slate-400 text-[10px] font-normal hidden min-[480px]:inline">Realtime:</span>
+              <span className="text-emerald-400 font-mono font-black tracking-wider text-xs">
+                {wibTimeStr}
+              </span>
+            </div>
+
             {/* Status Kelancaran KBM */}
-            <span className={`text-[11px] sm:text-xs font-bold px-2.5 py-1 rounded-full border inline-flex items-center gap-1.5 ${kbmStatus.color}`}>
-              <Sparkles className="w-3.5 h-3.5" />
+            <span className={`text-[10.5px] font-bold px-2 py-0.5 rounded-full border inline-flex items-center gap-1 shrink-0 ${kbmStatus.color}`}>
+              <Sparkles className="w-3 h-3" />
               {kbmStatus.text}
             </span>
           </div>
 
-          {/* Tombol Ciutkan / Buka Panel Infografis */}
+          {/* Tombol Ciutkan / Buka Panel Infografis (Sejajar di Baris Utama) */}
           <button
             onClick={() => setIsCollapsed(prev => !prev)}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-colors cursor-pointer shrink-0 ml-auto"
+            className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-colors cursor-pointer shrink-0 ml-auto"
             title={isCollapsed ? 'Buka Infografis KBM' : 'Ciutkan Infografis KBM'}
           >
             <span className="hidden sm:inline">{isCollapsed ? 'Buka Ringkasan' : 'Ciutkan'}</span>
-            {isCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+            {isCollapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
           </button>
-        </div>
-
-        {/* BARIS 2: Durasi Jam KBM dan Jam Realtime WIB */}
-        <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center gap-2 sm:gap-3.5 flex-wrap">
-          {/* Durasi Waktu Jam KBM */}
-          <div className="flex items-center gap-1.5 bg-slate-900/90 text-slate-200 px-2.5 sm:px-3 py-1 rounded-lg border border-slate-800 font-mono text-xs sm:text-sm font-semibold tracking-tight shadow-inner">
-            <Clock className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-            <span className="text-slate-400 text-[11px] font-normal hidden sm:inline">Durasi KBM:</span>
-            <span>{isWeekend ? 'Hari Libur KBM' : timeRangeText} WIB</span>
-          </div>
-
-          <span className="text-slate-600 hidden min-[400px]:inline text-xs">·</span>
-
-          {/* Jam Realtime WIB Digital */}
-          <div className="flex items-center gap-2 bg-slate-950/90 px-3 py-1 rounded-lg border border-emerald-500/40 shadow-inner">
-            <span className="relative flex h-2 sm:h-2.5 w-2 sm:w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 sm:h-2.5 w-2 sm:w-2.5 bg-emerald-500"></span>
-            </span>
-            <span className="text-slate-400 text-[11px] font-normal hidden min-[480px]:inline">Realtime:</span>
-            <span className="text-emerald-400 font-mono font-black tracking-wider text-xs sm:text-sm">
-              {wibTimeStr} WIB
-            </span>
-          </div>
         </div>
       </div>
 
       {/* Konten Infografis Utama (Bisa diciutkan) */}
       {!isCollapsed && (
-        <div className="p-2 sm:p-2.5 bg-slate-50/50">
+        <div className="p-1.5 sm:p-2 bg-slate-50/50">
           {/* TATA LETAK FIT 1-LAYAR HP (2x2 grid) & RESPONSIVE DESKTOP (4 kolom) */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-2.5">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 sm:gap-2">
             
-            {/* KOTAK 2: SESI KBM HARI INI */}
+            {/* KOTAK 1: SESI KBM HARI INI */}
             <div 
               onClick={() => {
                 if (onToggleUnconfirmed) {
@@ -524,33 +521,33 @@ export const ExecutiveInfographic: React.FC<ExecutiveInfographicProps> = ({
                 }
               }}
               title="Klik untuk membuka / menutup daftar kelas belum terkonfirmasi di bawah"
-              className="p-2 sm:p-2.5 rounded-xl bg-white border border-slate-200 hover:border-slate-300 hover:shadow-xs shadow-2xs flex flex-col justify-between cursor-pointer transition-all min-h-[98px]"
+              className="p-1.5 sm:p-2 rounded-xl bg-white border border-slate-200 hover:border-slate-300 hover:shadow-xs shadow-2xs flex flex-col justify-between cursor-pointer transition-all min-h-[76px]"
             >
-              <div className="flex items-center justify-between text-slate-500 mb-1">
-                <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1 truncate">
+              <div className="flex items-center justify-between text-slate-500 mb-0.5">
+                <span className="text-[10.5px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1 truncate">
                   <Clock className="w-3 h-3 text-indigo-600 shrink-0" />
                   SESI KBM HARI INI
                 </span>
-                <span className="text-[10px] text-slate-400 font-mono shrink-0">Jam 1 - {activePeriodNumber}</span>
+                <span className="text-[9.5px] text-slate-400 font-mono shrink-0">Jam 1 - {activePeriodNumber}</span>
               </div>
 
               <div className="flex items-center justify-between gap-1.5">
                 <div className="min-w-0">
                   <div className="flex items-baseline gap-1">
-                    <span className="text-xl sm:text-2xl font-black font-mono tracking-tight text-slate-900 tabular-nums">
+                    <span className="text-lg sm:text-xl font-black font-mono tracking-tight text-slate-900 tabular-nums">
                       {todaySessionsAnalysis.percent}%
                     </span>
                   </div>
-                  <div className="flex flex-col text-[9.5px] sm:text-[10.5px] text-slate-700 leading-snug mt-1 font-medium space-y-0.5">
-                    <span className="text-emerald-800 font-semibold truncate flex items-center justify-between gap-1.5">
-                      <span>Terkonfirmasi guru:</span>
-                      <strong className="font-mono text-xs font-bold text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200 shrink-0">
+                  <div className="flex flex-col text-[9px] sm:text-[10px] text-slate-700 leading-tight mt-0.5 font-medium space-y-0.5">
+                    <span className="text-emerald-800 font-semibold truncate flex items-center justify-between gap-1">
+                      <span>Terkonfirmasi:</span>
+                      <strong className="font-mono text-[10.5px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200 shrink-0">
                         {todaySessionsAnalysis.terkonfirmasiCount}
                       </strong>
                     </span>
-                    <span className={`truncate flex items-center justify-between gap-1.5 ${todaySessionsAnalysis.belumKonfirmasiCount > 0 ? 'text-rose-800 font-bold' : 'text-slate-500'}`}>
-                      <span>Belum konfirmasi:</span>
-                      <strong className="font-mono text-xs font-bold text-rose-700 bg-rose-50 px-1 py-0.2 rounded border border-rose-200 shrink-0">
+                    <span className={`truncate flex items-center justify-between gap-1 ${todaySessionsAnalysis.belumKonfirmasiCount > 0 ? 'text-rose-800 font-bold' : 'text-slate-500'}`}>
+                      <span>Belum konf:</span>
+                      <strong className="font-mono text-[10.5px] font-bold text-rose-700 bg-rose-50 px-1 py-0.2 rounded border border-rose-200 shrink-0">
                         {todaySessionsAnalysis.belumKonfirmasiCount}
                       </strong>
                     </span>
@@ -558,7 +555,7 @@ export const ExecutiveInfographic: React.FC<ExecutiveInfographicProps> = ({
                 </div>
 
                 {/* Visual Radial Gauge Ring Mini */}
-                <div className="relative w-11 h-11 sm:w-12 sm:h-12 shrink-0">
+                <div className="relative w-10 h-10 sm:w-11 sm:h-11 shrink-0">
                   <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
                     <circle
                       cx="18"
@@ -588,82 +585,79 @@ export const ExecutiveInfographic: React.FC<ExecutiveInfographicProps> = ({
                       fill="transparent"
                     />
                   </svg>
-                  <div className="absolute inset-0 flex items-center justify-center font-mono text-[9px] font-bold text-slate-700">
+                  <div className="absolute inset-0 flex items-center justify-center font-mono text-[8.5px] font-bold text-slate-700">
                     {todaySessionsAnalysis.terkonfirmasiCount}/{todaySessionsAnalysis.totalCumulativeCount}
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* KOTAK 3: SESI KBM KESELURUHAN HARI INI (3 SUB-KOTAK: BERLALU, AKTIF, AKAN DATANG) */}
-            <div className="p-2 sm:p-2.5 rounded-xl bg-white border border-slate-200 shadow-2xs flex flex-col justify-between min-h-[98px]">
-              <div className="flex items-center justify-between text-slate-500 mb-1">
-                <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1 truncate">
+            {/* KOTAK 2: SESI KBM KESELURUHAN HARI INI (3 SUB-KOTAK) */}
+            <div className="p-1.5 sm:p-2 rounded-xl bg-white border border-slate-200 shadow-2xs flex flex-col justify-between min-h-[76px]">
+              <div className="flex items-center justify-between text-slate-500 mb-0.5">
+                <span className="text-[10.5px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1 truncate">
                   <CalendarDays className="w-3 h-3 text-blue-600 shrink-0" />
                   Sesi Harian
                 </span>
-                <span className="text-[10px] text-blue-700 font-bold bg-blue-50 px-1.5 py-0.2 rounded font-mono shrink-0 border border-blue-200">
+                <span className="text-[9px] text-blue-700 font-bold bg-blue-50 px-1 py-0.2 rounded font-mono shrink-0 border border-blue-200">
                   {totalDailySessions} Total
                 </span>
               </div>
 
               {/* 3 Sub-Kotak: Kiri (Berlalu), Tengah (Sesi Aktif), Kanan (Akan Datang) */}
               <div className="grid grid-cols-3 gap-1 mt-0.5">
-                {/* 1. Kiri: Berlalu */}
-                <div className="p-1 rounded-lg bg-slate-50 border border-slate-200 text-center flex flex-col justify-center">
-                  <span className="text-[8.5px] text-slate-500 block leading-none font-medium">Berlalu</span>
-                  <span className="text-xs sm:text-sm font-bold font-mono text-slate-800 tabular-nums mt-0.5">
+                <div className="p-0.5 rounded-md bg-slate-50 border border-slate-200 text-center flex flex-col justify-center">
+                  <span className="text-[8px] text-slate-500 block leading-none font-medium">Berlalu</span>
+                  <span className="text-xs font-bold font-mono text-slate-800 tabular-nums mt-0.5">
                     {dailySessionsBreakdown.passedCount}
                   </span>
                 </div>
 
-                {/* 2. Tengah: Sesi Aktif (Format: Rasio Absen / Sesi Aktif) */}
-                <div className="p-1 rounded-lg bg-emerald-50 border border-emerald-200 text-center flex flex-col justify-center">
-                  <span className="text-[8.5px] text-emerald-800 block leading-none font-bold truncate">Sesi Aktif</span>
-                  <span className="text-xs sm:text-sm font-black font-mono text-emerald-700 tabular-nums mt-0.5" title="Sesi aktif yang sudah absen / Total sesi aktif saat ini">
+                <div className="p-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-center flex flex-col justify-center">
+                  <span className="text-[8px] text-emerald-800 block leading-none font-bold truncate">Aktif</span>
+                  <span className="text-xs font-black font-mono text-emerald-700 tabular-nums mt-0.5" title="Sesi aktif yang sudah absen / Total sesi aktif saat ini">
                     {dailySessionsBreakdown.activeTotalCount > 0
                       ? `${dailySessionsBreakdown.activeConfirmedCount}/${dailySessionsBreakdown.activeTotalCount}`
                       : '0'}
                   </span>
                 </div>
 
-                {/* 3. Kanan: Akan Datang */}
-                <div className="p-1 rounded-lg bg-indigo-50/70 border border-indigo-200 text-center flex flex-col justify-center">
-                  <span className="text-[8.5px] text-indigo-700 block leading-none font-medium truncate">Akan Datang</span>
-                  <span className="text-xs sm:text-sm font-bold font-mono text-indigo-800 tabular-nums mt-0.5">
+                <div className="p-0.5 rounded-md bg-indigo-50/70 border border-indigo-200 text-center flex flex-col justify-center">
+                  <span className="text-[8px] text-indigo-700 block leading-none font-medium truncate">Mendatang</span>
+                  <span className="text-xs font-bold font-mono text-indigo-800 tabular-nums mt-0.5">
                     {dailySessionsBreakdown.upcomingCount}
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* KOTAK 4: STATUS GURU (DIAGRAM PIE/DONUT 4-KRITERIA) */}
-            <div className="p-2 sm:p-2.5 rounded-xl bg-white border border-slate-200 shadow-2xs flex flex-col justify-between min-h-[98px]">
+            {/* KOTAK 3: STATUS GURU (2 KOLOM: KIRI: ADA GURU & IZIN; KANAN: BELUM KONF. & NON JADWAL) */}
+            <div className="p-1.5 sm:p-2 rounded-xl bg-white border border-slate-200 shadow-2xs flex flex-col justify-between min-h-[76px]">
               <div 
                 onClick={() => openTeacherModal('all')}
-                className="flex items-center justify-between text-slate-500 mb-1 cursor-pointer hover:opacity-80 transition-opacity"
+                className="flex items-center justify-between text-slate-500 mb-0.5 cursor-pointer hover:opacity-80 transition-opacity"
                 title="Klik untuk membuka detail status guru"
               >
-                <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1 truncate">
+                <span className="text-[10.5px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1 truncate">
                   <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
                   Status Guru ({teacherStats.totalMasterTeachers})
                 </span>
                 {teacherStats.izinCount > 0 ? (
-                  <span className="text-[9.5px] text-amber-800 font-bold bg-amber-50 px-1 py-0.2 rounded font-mono shrink-0 border border-amber-200">
+                  <span className="text-[9px] text-amber-800 font-bold bg-amber-50 px-1 py-0.2 rounded font-mono shrink-0 border border-amber-200">
                     {teacherStats.izinCount} Izin
                   </span>
                 ) : (
-                  <span className="text-[9.5px] text-emerald-700 font-bold bg-emerald-50 px-1 py-0.2 rounded font-mono shrink-0 border border-emerald-200">
+                  <span className="text-[9px] text-emerald-700 font-bold bg-emerald-50 px-1 py-0.2 rounded font-mono shrink-0 border border-emerald-200">
                     Nihil Izin
                   </span>
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
-                {/* Donut Chart SVG 4 Segmen (Klik untuk buka modal detail) */}
+              <div className="flex items-center gap-1.5">
+                {/* Donut Chart SVG 4 Segmen */}
                 <div 
                   onClick={() => openTeacherModal('all')}
-                  className="relative w-12 h-12 sm:w-13 sm:h-13 shrink-0 cursor-pointer hover:scale-105 transition-transform"
+                  className="relative w-10 h-10 sm:w-11 sm:h-11 shrink-0 cursor-pointer hover:scale-105 transition-transform"
                   title="Klik untuk melihat detail seluruh guru"
                 >
                   <svg className="w-full h-full -rotate-90" viewBox="0 0 76 76">
@@ -698,68 +692,68 @@ export const ExecutiveInfographic: React.FC<ExecutiveInfographicProps> = ({
                     <span className="font-mono text-xs font-black text-slate-800 tabular-nums">
                       {teacherStats.hadirCount}
                     </span>
-                    <span className="text-[8px] text-slate-500 font-medium">Hadir</span>
+                    <span className="text-[7.5px] text-slate-500 font-medium">Hadir</span>
                   </div>
                 </div>
 
-                {/* 4 Baris Keterangan Ringkas (Sesuai Permintaan Spesifik User) */}
-                <div className="flex-1 grid grid-cols-1 gap-0.5 text-[9px] sm:text-[9.5px] leading-tight">
-                  {/* 1. Ada Guru */}
+                {/* 2 Kolom Keterangan Status Guru (Kiri: Ada Guru & Izin; Kanan: Belum Konf. & Non Jadwal) */}
+                <div className="flex-1 grid grid-cols-2 gap-x-1 gap-y-0.5 text-[8.5px] sm:text-[9px] leading-tight">
+                  {/* Kolom Kiri: 1. Ada Guru */}
                   <div 
                     onClick={() => openTeacherModal('hadir')}
                     className="flex items-center justify-between text-emerald-900 hover:bg-emerald-50 p-0.5 rounded cursor-pointer transition-colors"
                     title="Klik untuk detail Ada Guru"
                   >
-                    <span className="flex items-center gap-1 truncate font-medium">
+                    <span className="flex items-center gap-0.5 truncate font-medium">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
-                      Ada Guru
+                      <span className="truncate">Ada Guru</span>
                     </span>
-                    <span className="font-mono font-bold bg-emerald-100/80 px-1 py-0.2 rounded text-[9px] text-emerald-900">
+                    <span className="font-mono font-bold bg-emerald-100/80 px-1 py-0.2 rounded text-[8.5px] text-emerald-900 shrink-0 ml-0.5">
                       {teacherStats.hadirCount}
                     </span>
                   </div>
 
-                  {/* 2. Izin */}
-                  <div 
-                    onClick={() => openTeacherModal('izin')}
-                    className="flex items-center justify-between text-amber-900 hover:bg-amber-50 p-0.5 rounded cursor-pointer transition-colors"
-                    title="Klik untuk detail Izin (Sakit, Pribadi, Dinas, Instruksi)"
-                  >
-                    <span className="flex items-center gap-1 truncate font-medium">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
-                      Izin (Sakit/Dinas)
-                    </span>
-                    <span className="font-mono font-bold bg-amber-100/80 px-1 py-0.2 rounded text-[9px] text-amber-900">
-                      {teacherStats.izinCount}
-                    </span>
-                  </div>
-
-                  {/* 3. Belum Konfirmasi */}
+                  {/* Kolom Kanan: 3. Belum Konfirmasi */}
                   <div 
                     onClick={() => openTeacherModal('belumKonfirmasi')}
                     className="flex items-center justify-between text-rose-900 hover:bg-rose-50 p-0.5 rounded cursor-pointer transition-colors"
                     title="Klik untuk detail Guru Belum Konfirmasi"
                   >
-                    <span className="flex items-center gap-1 truncate font-medium">
+                    <span className="flex items-center gap-0.5 truncate font-medium">
                       <span className="w-1.5 h-1.5 rounded-full bg-rose-600 shrink-0"></span>
-                      Belum Konfirmasi
+                      <span className="truncate">Belum Konf.</span>
                     </span>
-                    <span className="font-mono font-bold bg-rose-100/80 px-1 py-0.2 rounded text-[9px] text-rose-900">
+                    <span className="font-mono font-bold bg-rose-100/80 px-1 py-0.2 rounded text-[8.5px] text-rose-900 shrink-0 ml-0.5">
                       {teacherStats.belumKonfirmasiCount}
                     </span>
                   </div>
 
-                  {/* 4. Tidak ada jadwal */}
+                  {/* Kolom Kiri: 2. Izin */}
+                  <div 
+                    onClick={() => openTeacherModal('izin')}
+                    className="flex items-center justify-between text-amber-900 hover:bg-amber-50 p-0.5 rounded cursor-pointer transition-colors"
+                    title="Klik untuk detail Izin"
+                  >
+                    <span className="flex items-center gap-0.5 truncate font-medium">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
+                      <span className="truncate">Izin</span>
+                    </span>
+                    <span className="font-mono font-bold bg-amber-100/80 px-1 py-0.2 rounded text-[8.5px] text-amber-900 shrink-0 ml-0.5">
+                      {teacherStats.izinCount}
+                    </span>
+                  </div>
+
+                  {/* Kolom Kanan: 4. Tidak ada jadwal */}
                   <div 
                     onClick={() => openTeacherModal('nonJadwal')}
                     className="flex items-center justify-between text-slate-700 hover:bg-slate-100 p-0.5 rounded cursor-pointer transition-colors"
                     title="Klik untuk detail Guru Non-Jadwal"
                   >
-                    <span className="flex items-center gap-1 truncate font-medium">
+                    <span className="flex items-center gap-0.5 truncate font-medium">
                       <span className="w-1.5 h-1.5 rounded-full bg-slate-500 shrink-0"></span>
-                      Tidak ada jadwal
+                      <span className="truncate">Non Jadwal</span>
                     </span>
-                    <span className="font-mono font-bold bg-slate-100 px-1 py-0.2 rounded text-[9px] text-slate-800">
+                    <span className="font-mono font-bold bg-slate-100 px-1 py-0.2 rounded text-[8.5px] text-slate-800 shrink-0 ml-0.5">
                       {teacherStats.nonJadwalCount}
                     </span>
                   </div>
@@ -767,16 +761,16 @@ export const ExecutiveInfographic: React.FC<ExecutiveInfographicProps> = ({
               </div>
             </div>
 
-            {/* KOTAK 5: TABEL GURU IZIN TIDAK MENGAJAR (AUTO-SCROLL) */}
+            {/* KOTAK 4: TABEL GURU IZIN TIDAK MENGAJAR (AUTO-SCROLL) */}
             <div 
-              className="p-2 sm:p-2.5 rounded-xl bg-white border border-slate-200 shadow-2xs flex flex-col justify-between min-h-[98px] relative"
+              className="p-1.5 sm:p-2 rounded-xl bg-white border border-slate-200 shadow-2xs flex flex-col justify-between min-h-[76px] relative"
               onMouseEnter={() => setIsPausedScroll(true)}
               onMouseLeave={() => setIsPausedScroll(false)}
               onTouchStart={() => setIsPausedScroll(true)}
               onTouchEnd={() => setIsPausedScroll(false)}
             >
-              <div className="flex items-center justify-between text-slate-500 mb-1">
-                <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1 truncate">
+              <div className="flex items-center justify-between text-slate-500 mb-0.5">
+                <span className="text-[10.5px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1 truncate">
                   <UserX className="w-3 h-3 text-rose-600 shrink-0" />
                   Guru Izin ({absentTeacherList.length})
                 </span>
@@ -784,10 +778,10 @@ export const ExecutiveInfographic: React.FC<ExecutiveInfographicProps> = ({
                 {absentTeacherList.length > 3 && (
                   <button 
                     onClick={() => setIsPausedScroll(p => !p)}
-                    className="text-[9px] text-slate-400 hover:text-slate-700 flex items-center gap-0.5 cursor-pointer"
+                    className="text-[8.5px] text-slate-400 hover:text-slate-700 flex items-center gap-0.5 cursor-pointer"
                     title={isPausedScroll ? 'Lanjutkan Auto-scroll' : 'Jeda Auto-scroll'}
                   >
-                    {isPausedScroll ? <Play className="w-2.5 h-2.5 text-indigo-600" /> : <Pause className="w-2.5 h-2.5" />}
+                    {isPausedScroll ? <Play className="w-2 h-2 text-indigo-600" /> : <Pause className="w-2 h-2" />}
                     <span>{isPausedScroll ? 'Jeda' : 'Scroll'}</span>
                   </button>
                 )}
@@ -796,7 +790,7 @@ export const ExecutiveInfographic: React.FC<ExecutiveInfographicProps> = ({
               {/* Kontainer Scroll Vertikal */}
               <div 
                 ref={scrollRef}
-                className="h-[74px] sm:h-[78px] overflow-y-auto no-scrollbar space-y-1 pr-0.5"
+                className="h-[52px] sm:h-[56px] overflow-y-auto no-scrollbar space-y-1 pr-0.5"
                 style={{ scrollBehavior: 'smooth' }}
               >
                 {absentTeacherList.length === 0 ? (

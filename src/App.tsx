@@ -295,17 +295,9 @@ export default function App() {
           isInitialSyncDoneRef.current = true;
 
           setAttendanceLogs(bundle.attendanceLogs);
-          // Prioritaskan tanggal hari ini (WIB) atau tanggal terbaru dari attendance logs
+          // Selalu prioritaskan tanggal hari ini (WIB) saat reload spreadsheet/database
           const todayWIB = getTodayWIBDisplayDate();
-          const hasToday = bundle.attendanceLogs.some(l => isSameDate(l.tanggal, todayWIB));
-          if (hasToday) {
-            setSelectedDate(todayWIB);
-          } else {
-            const latest = bundle.attendanceLogs[bundle.attendanceLogs.length - 1];
-            if (latest && latest.tanggal) {
-              setSelectedDate(formatToIndonesianDisplayDate(latest.tanggal));
-            }
-          }
+          setSelectedDate(todayWIB);
         }
 
         setIsLiveConnected(true);
@@ -461,6 +453,13 @@ export default function App() {
   // Daftar tanggal KBM bulan berjalan yang dapat dipilih
   const availableDates = useMemo(() => {
     const datesMap = new Map<string, string>(); // canonicalKey -> displayDate
+
+    // 0. Pastikan tanggal hari ini (WIB) selalu terdaftar
+    const todayWIB = getTodayWIBDisplayDate();
+    if (todayWIB) {
+      const key = canonicalDateKey(todayWIB);
+      if (key) datesMap.set(key, todayWIB);
+    }
 
     // 1. Masukkan semua tanggal dari data attendanceLogs
     attendanceLogs.forEach(l => {
@@ -640,6 +639,7 @@ export default function App() {
             recentlyUpdatedClasses={recentlyUpdatedClasses}
             selectedGrade={selectedGrade}
             onSelectGrade={setSelectedGrade}
+            isFullscreen={isFullscreen}
           />
         )}
 

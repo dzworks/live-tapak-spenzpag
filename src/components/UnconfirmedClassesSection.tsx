@@ -6,7 +6,7 @@ import {
   MasterMapel, 
   ClassMaster 
 } from '../types';
-import { normalizeClassName, getDayNameIndonesian, isSameDate } from '../utils/appsScriptCode';
+import { normalizeClassName, getDayNameIndonesian, isSameDate, isSampleEntity } from '../utils/appsScriptCode';
 import { 
   AlertCircle, 
   CheckCircle2, 
@@ -135,6 +135,17 @@ export const UnconfirmedClassesSection: React.FC<UnconfirmedClassesSectionProps>
         const teacher = teachersMap[sched.kodeGuru];
         const subject = subjectsMap[sched.kodeMapel];
         const classMaster = classesMap[sched.namaKelas] || classesMap[normSchedClass];
+
+        // Abaikan guru/mapel/kelas contoh dari kotak kelas belum terkonfirmasi
+        if (isSampleEntity({
+          kodeGuru: sched.kodeGuru,
+          namaGuru: teacher?.namaLengkap,
+          kodeMapel: sched.kodeMapel,
+          namaMapel: subject?.namaMapel,
+          namaKelas: sched.namaKelas,
+        })) {
+          return;
+        }
 
         // Cek apakah sudah ada catatan presensi untuk sesi mengajar ini
         const hasAttendance = logsToday.some(log => {
