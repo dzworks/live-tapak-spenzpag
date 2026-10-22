@@ -1,0 +1,1753 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>TAPAK - SMP Negeri 1 Pagaden</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #080c17; color: #f1f5f9; }
+    
+    @keyframes pulseRing {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.08); opacity: 0.2; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+    .animate-pulse-ring { animation: pulseRing 3s infinite ease-in-out; }
+    
+    @keyframes scanLine {
+      0% { top: 0%; opacity: 0.8; }
+      50% { opacity: 1; }
+      100% { top: 92%; opacity: 0.8; }
+    }
+    .animate-scan-line { animation: scanLine 2s infinite ease-in-out; }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-6px); }
+      50% { transform: translateX(6px); }
+      75% { transform: translateX(-6px); }
+    }
+    .animate-shake { animation: shake 0.4s ease-in-out; }
+    
+    #reader video {
+      object-fit: cover !important;
+      border-radius: 1rem;
+      width: 100% !important;
+      height: 100% !important;
+    }
+    #reader__dashboard_section_csr { display: none !important; }
+    
+    @keyframes indeterminate {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(200%); }
+    }
+    .animate-indeterminate {
+      animation: indeterminate 1.5s infinite linear;
+    }
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+  </style>
+</head>
+<body class="selection:bg-blue-500 selection:text-white">
+
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    const API_URL = "https://script.google.com/macros/s/AKfycbwkb_jsbOzYkAKSIdKZeU2Ywy3Bjey9M7qygDpEN-mojXNvtNvaV78y2S-G3Swz7qC-/exec"; 
+    
+    const CameraIcon = ({ className="w-6 h-6" }) => (<svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>);
+    const HeartIcon = ({ className="w-5 h-5" }) => (<svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 016.364 0L12 7.636l1.318-1.318a4.5 4.5 0 016.364 6.364L12 21.364l-7.682-7.682a4.5 4.5 0 010-6.364z"></path></svg>);
+    const CloseIcon = ({ className="w-6 h-6" }) => (<svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>);
+    const SpinnerIcon = ({ className="w-6 h-6" }) => (<svg className={`animate-spin ${className}`} fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>);
+    const CheckCircleIcon = ({ className="w-12 h-12" }) => (<svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>);
+    
+    const ClockIcon = ({ className="w-3 h-3" }) => (<svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>);
+    const LocationIcon = ({ className="w-3 h-3" }) => (<svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>);
+    const BookIcon = ({ className="w-3.5 h-3.5" }) => (<svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477-4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>);
+    const NextIcon = ({ className="w-3 h-3" }) => (<svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path></svg>);
+    const RefreshIcon = ({ className="w-3.5 h-3.5" }) => (<svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>);
+    const AlertIcon = ({ className="w-6 h-6" }) => (<svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>);
+    const CloudSyncIcon = ({ className="w-6 h-6" }) => (<svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>);
+    const HistoryIcon = ({ className="w-6 h-6" }) => (<svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>);
+    const DocumentIcon = ({ className="w-6 h-6" }) => (<svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>);
+
+    const playSuccessChime = () => {
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(523.25, now);
+        osc.frequency.exponentialRampToValueAtTime(783.99, now + 0.15);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(now); osc.stop(now + 0.4);
+      } catch (e) { }
+    };
+
+    function App() {
+      const [time, setTime] = useState('');
+      const [dateStr, setDateStr] = useState('');
+      const [currentDay, setCurrentDay] = useState('');
+      
+      const [localCache, setLocalCache] = useState(null);
+      const [syncStatus, setSyncStatus] = useState('idle'); 
+
+      const [isModalOpen, setIsModalOpen] = useState(false);
+      const [modalPhase, setModalPhase] = useState('CLOSED');
+      const [apiError, setApiError] = useState(null);
+      
+      const [cameras, setCameras] = useState([]);
+      const [selectedCameraId, setSelectedCameraId] = useState('');
+      const html5QrCodeRef = useRef(null);
+
+      const [kegiatan, setKegiatan] = useState('');
+      const [kegiatanError, setKegiatanError] = useState(false);
+      
+      const [isPengganti, setIsPengganti] = useState(false);
+      const [penggantiSearch, setPenggantiSearch] = useState('');
+      const [selectedPenggantiName, setSelectedPenggantiName] = useState('');
+      // UPDATE: State internal untuk menyimpan Kode Guru Pengganti (Contoh: G-02)
+      const [selectedPenggantiId, setSelectedPenggantiId] = useState('');
+      const [isPenggantiDropdownOpen, setIsPenggantiDropdownOpen] = useState(false);
+      const [penggantiError, setPenggantiError] = useState(false);
+
+      const [scanResult, setScanResult] = useState(null);
+      const [scannedToken, setScannedToken] = useState('');
+      const [showConfirmation, setShowConfirmation] = useState(false);
+      
+      const [isManualMode, setIsManualMode] = useState(false);
+      const [manualForm, setManualForm] = useState({ kode_guru: '', kode_mapel: '', jam_ke: '', mapel_ke: '', waktu_mulai_hh: '', waktu_mulai_mm: '', waktu_selesai_hh: '', waktu_selesai_mm: '' });
+      const [manualFormError, setManualFormError] = useState('');
+      
+      const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+      const [offlineQueue, setOfflineQueue] = useState([]);
+      const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
+      const [sentHistory, setSentHistory] = useState([]);
+      const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+
+      const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
+      const [leaveModalPhase, setLeaveModalPhase] = useState('LEAVE_FORM');
+      const [leaveForm, setLeaveForm] = useState({
+        teacherId: '',
+        type: 'Sakit',
+        isFullDay: false,
+        sessions: [], 
+        reason: '',
+        assigner: 'Kepala Sekolah'
+      });
+      const [leaveReasonError, setLeaveReasonError] = useState(false);
+      const [teacherSearch, setTeacherSearch] = useState('');
+      const [isTeacherDropdownOpen, setIsTeacherDropdownOpen] = useState(false);
+
+      const [pinInput, setPinInput] = useState('');
+      const [pinAttempts, setPinAttempts] = useState(0);
+      const [pinErrorShake, setPinErrorShake] = useState(false);
+      const [dynamicRoomData, setDynamicRoomData] = useState(null);
+
+      const teacherList = localCache && localCache.master_guru 
+        ? Object.entries(localCache.master_guru).map(([id, data]) => ({id, nama: data.nama, nip: data.nip}))
+        : [];
+
+      const getTeacherSchedules = (tId) => {
+        if (!localCache || !localCache.schedules) return [];
+        const schedules = [];
+        for (const className in localCache.schedules) {
+          localCache.schedules[className].forEach((sched, index) => {
+            if (sched.kode_guru === tId) {
+               schedules.push({ ...sched, id: `${className}_${sched.jam_ke}_${index}`, nama_kelas: className });
+            }
+          });
+        }
+        schedules.sort((a, b) => {
+            if (!a.jam_mulai || !b.jam_mulai) return 0;
+            return a.jam_mulai.localeCompare(b.jam_mulai);
+        });
+        return schedules;
+      };
+
+      const handleLeaveSessionToggle = (sessionId) => {
+        setLeaveForm(prev => {
+          const newSessions = prev.sessions.includes(sessionId) 
+            ? prev.sessions.filter(id => id !== sessionId)
+            : [...prev.sessions, sessionId];
+            
+          const teacherSchedules = getTeacherSchedules(prev.teacherId);
+          const isAllSelected = teacherSchedules.length > 0 && newSessions.length === teacherSchedules.length;
+            
+          return { ...prev, sessions: newSessions, isFullDay: isAllSelected };
+        });
+      };
+
+      const submitLeaveRequest = async () => {
+          if (!leaveForm.reason.trim()) {
+              setLeaveReasonError(true);
+              return;
+          }
+          setLeaveReasonError(false);
+          setLeaveModalPhase('LOADING_LEAVE');
+          
+          const d = new Date();
+          const dd = String(d.getDate()).padStart(2, '0');
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          const yyyy = d.getFullYear();
+          
+          const _dNow = new Date();
+          const timestampStr = String(_dNow.getHours()).padStart(2, '0') + ':' + String(_dNow.getMinutes()).padStart(2, '0');
+          
+          const bulanIndo = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"];
+          const leaveDateFormatted = `${dd}-${bulanIndo[d.getMonth()]}-${yyyy}`;
+
+          const schedules = getTeacherSchedules(leaveForm.teacherId);
+          const selectedSchedules = leaveForm.isFullDay 
+            ? schedules 
+            : schedules.filter(s => leaveForm.sessions.includes(s.id));
+
+          if (selectedSchedules.length === 0) {
+             setLeaveModalPhase('LEAVE_FORM');
+             return; 
+          }
+
+          let infoDetail = leaveForm.reason;
+          if (leaveForm.type === 'Instruksi Pimpinan') {
+             infoDetail = `[Instruksi: ${leaveForm.assigner}] ${leaveForm.reason}`;
+          }
+
+          let anyOffline = false;
+
+          for (const sched of selectedSchedules) {
+             const cleanClass = sched.nama_kelas ? sched.nama_kelas.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() : "UNK";
+             const cleanMapel = sched.mapel_ke ? sched.mapel_ke.toString().replace(/[^a-zA-Z0-9]/g, '').toUpperCase() : "0";
+             const cleanGuru = sched.kode_guru ? sched.kode_guru.toString().replace(/[^a-zA-Z0-9]/g, '').toUpperCase() : "UNK";
+             const structuredId = `${dd}${mm}${yyyy}${cleanClass}${cleanMapel}${cleanGuru}`;
+
+             const payload = {
+                id_kiriman: structuredId,
+                is_leave: true,
+                leave_type: leaveForm.type,
+                info_ketidakhadiran: infoDetail,
+                kegiatan_pembelajaran: "-",
+                pengganti: "N", // Form perizinan selalu Set 'N' agar tidak jadi "Pengganti"
+                leave_time: timestampStr,
+                leave_date_formatted: leaveDateFormatted,
+                ruang_belajar: "Ruang Kelas",
+                data_jadwal: {
+                   ...sched,
+                   teacherName: sched.nama_guru,
+                   subject: sched.mata_pelajaran,
+                   waktu_mulai: sched.jam_mulai,
+                   waktu_selesai: sched.jam_selesai
+                }
+             };
+
+             const pushToOffline = () => {
+                 anyOffline = true;
+                 const queueItem = { id: structuredId + '_' + Date.now(), payload: payload, timestamp: timestampStr };
+                 let currentQueue = [];
+                 try { currentQueue = JSON.parse(localStorage.getItem('tapak_offline_queue') || '[]'); } catch(e){}
+                 currentQueue.push(queueItem);
+                 localStorage.setItem('tapak_offline_queue', JSON.stringify(currentQueue));
+                 setOfflineQueue(currentQueue);
+             };
+
+             if (!isOnline) {
+                 pushToOffline();
+             } else {
+                 try {
+                     const response = await fetch(API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({ action: 'submit', payload: payload })
+                     });
+                     const resData = await response.json();
+                     if (resData.status === 'success' || (resData.status === 'error' && resData.message.includes('sudah melakukan presensi'))) {
+                         addToHistory({
+                           id: structuredId + '_' + Date.now(),
+                           nama_kelas: sched.nama_kelas,
+                           mapel_ke: sched.mapel_ke,
+                           teacherName: sched.nama_guru,
+                           subject: sched.mata_pelajaran,
+                           waktu_mulai: sched.jam_mulai,
+                           waktu_selesai: sched.jam_selesai,
+                           timestamp: resData.data ? resData.data.waktu_absen : timestampStr
+                         });
+                     } else { pushToOffline(); }
+                 } catch (err) {
+                     pushToOffline();
+                 }
+             }
+          }
+
+          playSuccessChime();
+          if (anyOffline) {
+              setLeaveModalPhase('SUCCESS_LEAVE_OFFLINE');
+          } else {
+              setLeaveModalPhase('SUCCESS_LEAVE');
+          }
+      };
+
+      useEffect(() => {
+        const updateClock = () => {
+          const now = new Date();
+          const hours = String(now.getHours()).padStart(2, '0');
+          const minutes = String(now.getMinutes()).padStart(2, '0');
+          const seconds = String(now.getSeconds()).padStart(2, '0');
+          setTime(`${hours}:${minutes}:${seconds} WIB`);
+
+          const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+          setDateStr(now.toLocaleDateString('id-ID', options));
+          
+          const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+          setCurrentDay(days[now.getDay()]);
+        };
+        updateClock();
+        const timer = setInterval(updateClock, 1000);
+        return () => clearInterval(timer);
+      }, []);
+
+      useEffect(() => {
+        const storedQueue = localStorage.getItem('tapak_offline_queue');
+        if (storedQueue) {
+          try { setOfflineQueue(JSON.parse(storedQueue)); } catch(e) {}
+        }
+
+        const todayStr = new Date().toLocaleDateString('id-ID');
+        const storedDate = localStorage.getItem('tapak_history_date');
+        const storedHistory = localStorage.getItem('tapak_sent_history');
+        
+        if (storedDate !== todayStr) {
+          localStorage.removeItem('tapak_sent_history');
+          localStorage.setItem('tapak_history_date', todayStr);
+          setSentHistory([]);
+        } else if (storedHistory) {
+          try { setSentHistory(JSON.parse(storedHistory)); } catch(e) {}
+        }
+
+        const handleOnline = () => setIsOnline(true);
+        const handleOffline = () => setIsOnline(false);
+
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+
+        return () => {
+          window.removeEventListener('online', handleOnline);
+          window.removeEventListener('offline', handleOffline);
+        };
+      }, []);
+
+      const addToHistory = (itemData) => {
+        setSentHistory(prev => {
+          const newHist = [itemData, ...prev];
+          localStorage.setItem('tapak_sent_history', JSON.stringify(newHist));
+          return newHist;
+        });
+      };
+
+      const autoSyncOfflineData = async () => {
+        if (!isOnline || isBackgroundSyncing) return;
+        
+        const currentQueueStr = localStorage.getItem('tapak_offline_queue');
+        if (!currentQueueStr) return;
+        
+        let currentQueue = [];
+        try { currentQueue = JSON.parse(currentQueueStr); } catch(e) { return; }
+        
+        if (currentQueue.length === 0) return;
+
+        setIsBackgroundSyncing(true);
+        let remainingQueue = [...currentQueue];
+
+        for (let i = 0; i < currentQueue.length; i++) {
+          const item = currentQueue[i];
+          try {
+            const response = await fetch(API_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+              body: JSON.stringify({ action: 'submit', payload: item.payload })
+            });
+            const resData = await response.json();
+            
+            if (resData.status === 'success' || (resData.status === 'error' && resData.message.includes('sudah melakukan presensi'))) {
+              const _dNow = new Date();
+              const offlineFallbackTime = String(_dNow.getHours()).padStart(2, '0') + ':' + String(_dNow.getMinutes()).padStart(2, '0');
+              const timeToSave = resData.data ? resData.data.waktu_absen : offlineFallbackTime;
+              
+              addToHistory({
+                id: item.id,
+                nama_kelas: item.payload.data_jadwal.nama_kelas,
+                mapel_ke: item.payload.data_jadwal.mapel_ke,
+                teacherName: item.payload.data_jadwal.teacherName,
+                subject: item.payload.data_jadwal.subject,
+                waktu_mulai: item.payload.data_jadwal.waktu_mulai,
+                waktu_selesai: item.payload.data_jadwal.waktu_selesai,
+                timestamp: timeToSave
+              });
+              remainingQueue = remainingQueue.filter(q => q.id !== item.id);
+            }
+          } catch (err) {
+            break;
+          }
+        }
+        
+        localStorage.setItem('tapak_offline_queue', JSON.stringify(remainingQueue));
+        setOfflineQueue(remainingQueue);
+        setIsBackgroundSyncing(false);
+      };
+
+      useEffect(() => {
+        if (isOnline && offlineQueue.length > 0) {
+          autoSyncOfflineData();
+        }
+      }, [isOnline, offlineQueue.length]);
+
+      useEffect(() => {
+        if (!currentDay || syncStatus !== 'idle') return;
+        
+        const fetchScheduleLocally = async () => {
+          setSyncStatus('syncing');
+          
+          const cacheKey = `tapak_master_v1_${currentDay}`;
+          const cachedData = localStorage.getItem(cacheKey);
+          
+          if (cachedData) {
+              try { 
+                  setLocalCache(JSON.parse(cachedData)); 
+              } catch(e) {
+                  localStorage.removeItem(cacheKey);
+              }
+          }
+
+          if (API_URL.includes("ISI_DENGAN")) {
+              setTimeout(() => {
+                  const dummyData = {
+                    classes: { "SIMULASI-123": { id_kelas: "K-01", nama_kelas: "Kelas VII A", lokasi_ruang: "Ruang 1" } },
+                    schedules: { "Kelas VII A": [{ jam_ke: "1-2", mapel_ke: "1", jam_mulai: "07:00", jam_selesai: "23:00", nama_guru: "Drs. Budi Santoso", mata_pelajaran: "Matematika", nip: "123456", kode_guru: "G-01", kode_mapel: "MP-01" }] },
+                    master_guru: { "G-01": {nama: "Drs. Budi Santoso", nip: "123456"}, "G-02": {nama: "Siti Aminah, S.Pd", nip: "-"} },
+                    master_mapel: { "MP-01": "Matematika", "MP-02": "Bahasa Indonesia" },
+                    master_ruangan: { "QR-LAPANGAN": { nama_ruangan: "Lapangan Olahraga", pin: "1234" } } 
+                  };
+                  setLocalCache(dummyData);
+                  localStorage.setItem(cacheKey, JSON.stringify(dummyData));
+                  setSyncStatus('success');
+              }, 1000);
+              return;
+          }
+
+          if (!isOnline) {
+             if (cachedData) {
+                 setSyncStatus('success'); 
+             } else {
+                 setSyncStatus('error');
+             }
+             return;
+          }
+
+          try {
+            const response = await fetch(`${API_URL}?action=init&hariIni=${currentDay}`);
+            const resData = await response.json();
+            
+            if (resData.status === 'success') {
+              setLocalCache(resData.data);
+              localStorage.setItem(cacheKey, JSON.stringify(resData.data));
+              setSyncStatus('success');
+            } else {
+              setSyncStatus(cachedData ? 'success' : 'error');
+            }
+          } catch (error) {
+            setSyncStatus(cachedData ? 'success' : 'error');
+          }
+        };
+
+        fetchScheduleLocally();
+      }, [currentDay, syncStatus, isOnline]);
+
+      const processScheduleMatch = (namaKelasStr, idKelasStr, lokasiRuangAsli, isRuangKhusus = false) => {
+        const schedules = localCache.schedules[namaKelasStr.trim()];
+        let activeSched = null;
+        let nextSched = null;
+
+        if (schedules && schedules.length > 0) {
+          const now = new Date();
+          const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+          for (let i = 0; i < schedules.length; i++) {
+            const sched = schedules[i];
+            if (!sched.jam_mulai || !sched.jam_selesai) continue;
+            
+            const startParts = sched.jam_mulai.toString().replace('.', ':').split(':');
+            const endParts = sched.jam_selesai.toString().replace('.', ':').split(':');
+            if (startParts.length < 2 || endParts.length < 2) continue;
+
+            const startMins = parseInt(startParts[0]) * 60 + parseInt(startParts[1]);
+            const endMins = parseInt(endParts[0]) * 60 + parseInt(endParts[1]);
+
+            if (currentMinutes >= startMins && currentMinutes <= endMins) {
+              activeSched = sched;
+              if (i + 1 < schedules.length) {
+                nextSched = schedules[i + 1];
+              }
+              break;
+            }
+          }
+        }
+
+        const ruangBelajarStr = isRuangKhusus ? dynamicRoomData.nama_ruangan : "Ruang Kelas";
+        const lokasiRuangTampil = isRuangKhusus ? dynamicRoomData.nama_ruangan : lokasiRuangAsli;
+
+        if (activeSched) {
+          setIsManualMode(false);
+          setScanResult({
+            id_kelas: idKelasStr, 
+            nama_kelas: namaKelasStr, 
+            lokasi_ruang: lokasiRuangTampil,
+            ruang_belajar: ruangBelajarStr,
+            jam_ke: activeSched.jam_ke,
+            mapel_ke: activeSched.mapel_ke,
+            kode_guru: activeSched.kode_guru,
+            kode_mapel: activeSched.kode_mapel,
+            teacherName: activeSched.nama_guru, 
+            nip: activeSched.nip, 
+            subject: activeSched.mata_pelajaran,
+            waktu_mulai: activeSched.jam_mulai, 
+            waktu_selesai: activeSched.jam_selesai,
+            nextTeacher: nextSched ? { nama: nextSched.nama_guru, mapel: nextSched.mata_pelajaran } : null
+          });
+          setModalPhase('FORM');
+        } else {
+          setIsManualMode(true);
+          setManualForm({ kode_guru: '', kode_mapel: '', jam_ke: '', mapel_ke: '', waktu_mulai_hh: '', waktu_mulai_mm: '', waktu_selesai_hh: '', waktu_selesai_mm: '' });
+          setManualFormError('');
+          setScanResult({
+            id_kelas: idKelasStr, 
+            nama_kelas: namaKelasStr, 
+            lokasi_ruang: lokasiRuangTampil,
+            ruang_belajar: ruangBelajarStr,
+            jam_ke: "-", mapel_ke: "-", kode_guru: "-", kode_mapel: "-", teacherName: "-", nip: "-", subject: "-", waktu_mulai: "-", waktu_selesai: "-", nextTeacher: null
+          });
+          setModalPhase('NO_SCHEDULE');
+        }
+      };
+
+      const handleQrMatch = (token) => {
+        setScannedToken(token);
+        
+        if (!localCache || !localCache.classes) {
+          setApiError('Aplikasi masih mengunduh jadwal. Tunggu sebentar.');
+          setModalPhase('ERROR');
+          return;
+        }
+
+        const kelas = localCache.classes[token.trim()];
+        const ruangKhusus = localCache.master_ruangan ? localCache.master_ruangan[token.trim()] : null;
+
+        if (kelas) {
+          processScheduleMatch(kelas.nama_kelas, kelas.id_kelas, kelas.lokasi_ruang, false);
+          playSuccessChime();
+        } else if (ruangKhusus) {
+          setDynamicRoomData(ruangKhusus);
+          setPinInput('');
+          setPinAttempts(0);
+          setPinErrorShake(false);
+          setModalPhase('PIN_VERIFICATION');
+          playSuccessChime();
+        } else {
+          setApiError('QR Code tidak dikenali oleh sistem.');
+          setModalPhase('ERROR');
+        }
+      };
+
+      const handlePinPress = (numStr) => {
+        const expectedLength = dynamicRoomData?.pin.toString().length || 4;
+        
+        if (pinInput.length < expectedLength) {
+            const newPin = pinInput + numStr;
+            setPinInput(newPin);
+            
+            if (newPin.length === expectedLength) {
+                if (newPin === dynamicRoomData.pin.toString()) {
+                    setTimeout(() => { setModalPhase('SELECT_CLASS'); }, 200);
+                } else {
+                    setPinErrorShake(true);
+                    setTimeout(() => setPinErrorShake(false), 500);
+                    setTimeout(() => setPinInput(''), 300);
+                    
+                    const fails = pinAttempts + 1;
+                    setPinAttempts(fails);
+                    if (fails >= 3) {
+                        setTimeout(() => {
+                            setApiError('Keamanan: Akses ditolak karena 3x salah PIN. Mohon scan ulang dari awal.');
+                            setModalPhase('ERROR');
+                        }, 400);
+                    }
+                }
+            }
+        }
+      };
+
+      const handleDynamicClassSelect = (namaKelasStr) => {
+        const selectedKelasObj = Object.values(localCache.classes).find(c => c.nama_kelas === namaKelasStr);
+        if(selectedKelasObj) {
+            processScheduleMatch(selectedKelasObj.nama_kelas, selectedKelasObj.id_kelas, selectedKelasObj.lokasi_ruang, true);
+        }
+      };
+
+      const handleStartCamera = () => {
+        setIsModalOpen(true);
+        setModalPhase('PERMISSION');
+        setApiError(null);
+
+        Html5Qrcode.getCameras().then(devices => {
+          if (devices && devices.length > 0) {
+            setCameras(devices);
+            let defaultCam = devices[0].id;
+            for (let i = 0; i < devices.length; i++) {
+              let label = devices[i].label.toLowerCase();
+              if (label.includes("back") || label.includes("belakang") || label.includes("environment")) {
+                defaultCam = devices[i].id;
+                break;
+              }
+            }
+            setSelectedCameraId(defaultCam);
+            setModalPhase('SCANNING');
+          } else {
+            setApiError("Kamera tidak terdeteksi di perangkat Anda.");
+            setModalPhase('ERROR');
+          }
+        }).catch(err => {
+           setApiError("Izin kamera ditolak. Mohon izinkan akses kamera pada pop-up browser.");
+           setModalPhase('ERROR');
+        });
+      };
+
+      useEffect(() => {
+        let scanner = null;
+        if (isModalOpen && modalPhase === 'SCANNING' && selectedCameraId) {
+          scanner = new Html5Qrcode("reader");
+          html5QrCodeRef.current = scanner;
+          
+          const config = { 
+            fps: 15, 
+            qrbox: (vw, vh) => {
+              const size = Math.max(200, Math.min(vw, vh) * 0.75);
+              return { width: size, height: size };
+            }, 
+            aspectRatio: 1.0 
+          };
+
+          scanner.start(
+            selectedCameraId, config,
+            (decodedText) => { if (scanner.isScanning) scanner.stop(); handleQrMatch(decodedText); },
+            () => {}
+          ).catch(err => { console.warn("Camera init failed:", err); });
+        }
+        return () => { if (scanner && scanner.isScanning) scanner.stop().catch(e=>console.log(e)); };
+      }, [isModalOpen, modalPhase, selectedCameraId]);
+
+      const submitData = async () => {
+        setModalPhase('LOADING');
+        
+        const d = new Date();
+        const dd = String(d.getDate()).padStart(2, '0');
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const yyyy = d.getFullYear();
+        
+        let finalScanResult = { ...scanResult };
+        
+        if (isManualMode) {
+          const selectedGuru = localCache.master_guru[manualForm.kode_guru];
+          const selectedMapel = localCache.master_mapel[manualForm.kode_mapel];
+          
+          finalScanResult = {
+            ...finalScanResult,
+            jam_ke: manualForm.jam_ke,
+            mapel_ke: manualForm.mapel_ke,
+            kode_guru: manualForm.kode_guru,
+            kode_mapel: manualForm.kode_mapel, 
+            teacherName: selectedGuru ? selectedGuru.nama : manualForm.kode_guru,
+            nip: selectedGuru ? selectedGuru.nip : "-",
+            subject: selectedMapel || manualForm.kode_mapel, 
+            waktu_mulai: `${manualForm.waktu_mulai_hh.padStart(2, '0')}:${manualForm.waktu_mulai_mm.padStart(2, '0')}`,
+            waktu_selesai: `${manualForm.waktu_selesai_hh.padStart(2, '0')}:${manualForm.waktu_selesai_mm.padStart(2, '0')}`
+          };
+        }
+        
+        const cleanClass = finalScanResult.nama_kelas ? finalScanResult.nama_kelas.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() : "UNK";
+        const cleanMapel = finalScanResult.mapel_ke ? finalScanResult.mapel_ke.toString().replace(/[^a-zA-Z0-9]/g, '').toUpperCase() : "0";
+        const cleanGuru = finalScanResult.kode_guru ? finalScanResult.kode_guru.toString().replace(/[^a-zA-Z0-9]/g, '').toUpperCase() : "UNK";
+        
+        const structuredId = `${dd}${mm}${yyyy}${cleanClass}${cleanMapel}${cleanGuru}`;
+
+        const payload = {
+          qr_code: scannedToken,
+          id_kiriman: structuredId,
+          kegiatan_pembelajaran: kegiatan.trim() !== '' ? kegiatan : '-',
+          // UPDATE: Menggunakan selectedPenggantiId agar yang terkirim adalah KODE GURU
+          pengganti: isPengganti ? `Y - ${selectedPenggantiId}` : 'N',
+          ruang_belajar: finalScanResult.ruang_belajar || "Ruang Kelas",
+          data_jadwal: finalScanResult 
+        };
+
+        const saveToOfflineQueue = () => {
+          const _dNow = new Date();
+          const timestampStr = String(_dNow.getHours()).padStart(2, '0') + ':' + String(_dNow.getMinutes()).padStart(2, '0');
+          const queueItem = {
+            id: structuredId + '_' + Date.now(),
+            payload: payload,
+            timestamp: timestampStr
+          };
+          
+          let currentQueue = [];
+          try { currentQueue = JSON.parse(localStorage.getItem('tapak_offline_queue') || '[]'); } catch(e){}
+          currentQueue.push(queueItem);
+          
+          localStorage.setItem('tapak_offline_queue', JSON.stringify(currentQueue));
+          setOfflineQueue(currentQueue);
+          setScanResult({ ...finalScanResult, timestamp: timestampStr });
+          setModalPhase('SUCCESS_OFFLINE');
+          playSuccessChime();
+        };
+
+        if (API_URL.includes("ISI_DENGAN")) {
+             setTimeout(() => {
+                const _dNow = new Date();
+                const simTime = String(_dNow.getHours()).padStart(2, '0') + ':' + String(_dNow.getMinutes()).padStart(2, '0');
+                setScanResult({ ...finalScanResult, timestamp: simTime });
+                addToHistory({
+                   id: structuredId + '_' + Date.now(),
+                   nama_kelas: finalScanResult.nama_kelas,
+                   mapel_ke: finalScanResult.mapel_ke,
+                   teacherName: finalScanResult.teacherName,
+                   subject: finalScanResult.subject,
+                   waktu_mulai: finalScanResult.waktu_mulai,
+                   waktu_selesai: finalScanResult.waktu_selesai,
+                   timestamp: simTime
+                });
+                setModalPhase('SUCCESS'); playSuccessChime();
+             }, 1000);
+             return;
+        }
+
+        if (!isOnline) {
+          saveToOfflineQueue();
+          return;
+        }
+
+        try {
+          const response = await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ action: 'submit', payload: payload })
+          });
+          
+          const resData = await response.json();
+          if (resData.status === 'success') {
+            playSuccessChime();
+            setScanResult({ ...finalScanResult, timestamp: resData.data.waktu_absen });
+            addToHistory({
+               id: structuredId + '_' + Date.now(),
+               nama_kelas: finalScanResult.nama_kelas,
+               mapel_ke: finalScanResult.mapel_ke,
+               teacherName: finalScanResult.teacherName,
+               subject: finalScanResult.subject,
+               waktu_mulai: finalScanResult.waktu_mulai,
+               waktu_selesai: finalScanResult.waktu_selesai,
+               timestamp: resData.data.waktu_absen
+            });
+            setModalPhase('SUCCESS');
+          } else {
+             if (resData.message && resData.message.includes('sudah melakukan presensi')) {
+                setApiError(resData.message);
+                setModalPhase('ERROR');
+             } else {
+                setApiError(resData.message || 'Gagal menyimpan data.');
+                setModalPhase('ERROR');
+             }
+          }
+        } catch (err) {
+          saveToOfflineQueue();
+        }
+      };
+
+      const handleCloseModal = () => {
+        if (html5QrCodeRef.current?.isScanning) html5QrCodeRef.current.stop().catch(e=>e);
+        setIsModalOpen(false); setModalPhase('CLOSED'); setScannedToken('');
+        setKegiatan(''); setKegiatanError(false); setIsPengganti(false); setScanResult(null); setCameras([]); setSelectedCameraId('');
+        setShowConfirmation(false); setIsManualMode(false); setManualFormError('');
+        setPinInput(''); setPinAttempts(0); setPinErrorShake(false); setDynamicRoomData(null); 
+        // UPDATE: Reset semua state pencarian Guru Pengganti
+        setPenggantiSearch(''); setSelectedPenggantiName(''); setSelectedPenggantiId(''); setPenggantiError(false);
+      };
+
+      return (
+        <div className="relative flex flex-col justify-between items-center min-h-screen p-5 max-w-md mx-auto overflow-hidden shadow-2xl">
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none"></div>
+
+          <div className="absolute top-5 right-5 z-20">
+            <button 
+              onClick={() => setIsHistoryModalOpen(true)} 
+              className="flex items-center justify-center p-2.5 bg-slate-800/80 border border-slate-700/80 rounded-full text-blue-400 hover:text-white hover:bg-slate-700 transition-all shadow-lg"
+              title="Riwayat Presensi"
+            >
+              <HistoryIcon className="w-5 h-5" />
+            </button>
+          </div>
+
+          <header className="z-10 text-center mt-4 w-full space-y-3 flex flex-col items-center">
+            <h1 className="text-[4rem] font-black tracking-widest text-transparent bg-clip-text drop-shadow-md" style={{backgroundImage: 'linear-gradient(90deg, #44d0f5, #3b82f6)'}}>TAPAK</h1>
+            
+            {(!isOnline || offlineQueue.length > 0) && (
+              <div className={`z-20 flex items-center justify-between w-full max-w-[280px] px-3 py-2 rounded-xl shadow-lg border ${isOnline ? 'bg-indigo-900/80 border-indigo-500/50' : 'bg-red-900/80 border-red-500/50'}`}>
+                <div className="flex items-center gap-2">
+                  {isOnline ? (
+                    <RefreshIcon className={`w-4 h-4 text-indigo-300 ${isBackgroundSyncing ? 'animate-spin' : ''}`} />
+                  ) : (
+                    <AlertIcon className="w-4 h-4 text-red-300" />
+                  )}
+                  <span className={`text-[11px] font-bold ${isOnline ? 'text-indigo-200' : 'text-red-200'}`}>
+                    {isOnline ? (isBackgroundSyncing ? 'Menyinkronkan...' : 'Antrean Tersedia') : 'Mode Offline Aktif'}
+                  </span>
+                </div>
+                {offlineQueue.length > 0 && (
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${isOnline ? 'bg-indigo-700 text-white' : 'bg-red-700 text-white'}`}>
+                    {offlineQueue.length}
+                  </span>
+                )}
+              </div>
+            )}
+
+            <div className="inline-block px-4 py-1.5 rounded-full border shadow-lg backdrop-blur-md" style={{borderColor: '#214e6c', backgroundColor: 'rgba(15, 23, 42, 0.6)'}}>
+              <p className="text-[10px] font-semibold text-slate-300 tracking-wide uppercase"><span className="text-cyan-400 font-bold">T</span>ATA KEH<span className="text-cyan-400 font-bold">A</span>DIRAN <span className="text-cyan-400 font-bold">P</span>ENDIDIK DAL<span className="text-cyan-400 font-bold">A</span>M <span className="text-cyan-400 font-bold">K</span>ELAS</p>
+            </div>
+          </header>
+
+          <div className="z-10 w-full mt-4 rounded-2xl p-4 shadow-lg" style={{backgroundColor: '#16233d', border: '1px solid #1e3a5f'}}>
+            <div className="flex items-start gap-4">
+              <div className="p-2.5 rounded-xl flex-shrink-0 mt-0.5" style={{backgroundColor: '#1d3257', color: '#60a5fa'}}><HeartIcon className="w-5 h-5" /></div>
+              <div className="flex-1 text-left">
+                <p className="text-xs font-bold text-blue-200 leading-snug">Selamat datang, Bapak/Ibu Guru hebat.</p>
+                <p className="text-[11px] text-slate-300 leading-relaxed mt-1.5 opacity-90">Terima kasih atas dedikasi tiada henti bagi anak bangsa. Jangan khawatir, TAPAK hadir untuk mempermudah tugas Anda.</p>
+              </div>
+            </div>
+          </div>
+
+          <main className="z-10 my-auto flex flex-col items-center justify-center w-full py-4 mt-6">
+            
+            <div className="flex flex-col items-center justify-center mb-8 text-center w-full">
+              <span className="text-[2.25rem] font-mono font-bold tracking-widest drop-shadow-md" style={{color: '#6e9fe5'}}>{time || '00:00:00 WIB'}</span>
+              
+              <div className="flex flex-col items-center mt-2 w-full max-w-[220px]">
+                <span className="text-xs font-medium text-slate-300 mb-2.5">{dateStr}</span>
+                
+                <div className="flex flex-col items-center transition-colors duration-300 mt-1 text-center">
+                  {syncStatus === 'syncing' && (
+                    <>
+                      <span className="text-[10px] font-bold tracking-wider uppercase text-blue-400 animate-pulse">Menyinkronkan Jadwal...</span>
+                      <span className="text-[9px] font-medium text-slate-500 normal-case tracking-normal mt-1">Pastikan Anda memiliki koneksi internet</span>
+                    </>
+                  )}
+                  {syncStatus === 'success' && (
+                    <span className="text-[10px] font-bold tracking-wider uppercase text-emerald-400">Aplikasi Siap Digunakan</span>
+                  )}
+                  {syncStatus === 'error' && (
+                    <>
+                      <span className="text-[10px] font-bold tracking-wider uppercase text-rose-400">Jadwal Lokal Aktif</span>
+                      <span className="text-[9px] font-medium text-slate-500 normal-case tracking-normal mt-1">Gagal memuat jadwal baru. Menggunakan riwayat offline.</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="relative group flex flex-col items-center justify-center mb-8 mt-2 w-full gap-5">
+              
+              <div className="relative flex items-center justify-center w-40 h-40 mb-2">
+                
+                {syncStatus === 'syncing' && (
+                  <div className="absolute -inset-3.5 rounded-full border-[3px] border-slate-700/50 border-t-blue-400 animate-spin shadow-[0_0_15px_rgba(96,165,250,0.3)]"></div>
+                )}
+                
+                {syncStatus === 'success' && (
+                  <div className="absolute inset-0 rounded-full animate-pulse-ring" style={{backgroundColor: 'rgba(59, 130, 246, 0.4)'}}></div>
+                )}
+                
+                <button 
+                  onClick={handleStartCamera} 
+                  disabled={syncStatus === 'syncing' || syncStatus === 'error'}
+                  className={`relative flex flex-col items-center justify-center w-40 h-40 rounded-full shadow-2xl transition-all duration-500 ${(syncStatus === 'success') ? 'active:scale-95 cursor-pointer hover:shadow-[0_0_30px_rgba(59,130,246,0.3)]' : 'cursor-not-allowed grayscale opacity-75'}`}
+                  style={
+                    (syncStatus === 'success')
+                    ? { background: 'linear-gradient(145deg, #324fa3, #243575)', border: '2px solid #486ae0' }
+                    : { background: 'linear-gradient(145deg, #1e293b, #0f172a)', border: '2px solid #334155' }
+                  }
+                >
+                  <div className={`p-3 mb-2 rounded-2xl border pointer-events-none transition-colors duration-500 ${(syncStatus === 'success') ? 'bg-white/10 border-white/20' : 'bg-slate-800/80 border-slate-700/80'}`}>
+                    <CameraIcon className={`w-8 h-8 transition-colors duration-500 ${(syncStatus === 'success') ? 'text-white' : 'text-slate-500'}`} />
+                  </div>
+                  <span className={`text-sm font-bold tracking-wide pointer-events-none transition-colors duration-500 ${(syncStatus === 'success') ? 'text-white' : 'text-slate-400'}`}>Mulai Absen</span>
+                  <span className={`text-[10px] mt-0.5 pointer-events-none transition-colors duration-500 ${(syncStatus === 'success') ? 'text-blue-200 opacity-80' : 'text-slate-500'}`}>
+                    {(syncStatus === 'success') ? 'Ketuk Kamera' : 'Menunggu...'}
+                  </span>
+                </button>
+              </div>
+
+              <button 
+                onClick={() => { 
+                  if(syncStatus === 'syncing' || syncStatus === 'error') return; 
+                  setIsLeaveModalOpen(true); 
+                  setLeaveModalPhase('LEAVE_FORM'); 
+                  setLeaveForm({ teacherId: '', type: 'Sakit', isFullDay: false, sessions: [], reason: '', assigner: 'Kepala Sekolah' });
+                  setLeaveReasonError(false);
+                }}
+                disabled={syncStatus === 'syncing' || syncStatus === 'error'}
+                className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl shadow-lg border border-amber-500/30 transition-all ${(syncStatus === 'success') ? 'active:scale-95 hover:bg-slate-800 cursor-pointer' : 'opacity-50 cursor-not-allowed grayscale'}`}
+                style={{background: 'linear-gradient(145deg, #1e293b, #0f172a)'}}
+              >
+                <DocumentIcon className="w-5 h-5 text-amber-400" />
+                <span className="text-sm font-bold text-amber-100">Formulir Perizinan / Cuti</span>
+              </button>
+            </div>
+
+            <div className="w-full rounded-2xl p-4 text-left space-y-3.5 text-[11px] text-slate-300 shadow-md" style={{backgroundColor: '#131c33', border: '1px solid #1e2c4a'}}>
+              <div className="flex items-start gap-3"><span className="flex items-center justify-center w-5 h-5 rounded-full font-bold text-[10px] flex-shrink-0 mt-0.5" style={{backgroundColor: '#1d3257', color: '#60a5fa'}}>1</span><p>Ketuk tombol <strong className="text-white">Mulai Absen</strong> di tengah layar.</p></div>
+              <div className="flex items-start gap-3"><span className="flex items-center justify-center w-5 h-5 rounded-full font-bold text-[10px] flex-shrink-0 mt-0.5" style={{backgroundColor: '#1d3257', color: '#60a5fa'}}>2</span><p>Izinkan akses kamera pada pop-up browser Anda.</p></div>
+              <div className="flex items-start gap-3"><span className="flex items-center justify-center w-5 h-5 rounded-full font-bold text-[10px] flex-shrink-0 mt-0.5" style={{backgroundColor: '#1d3257', color: '#60a5fa'}}>3</span><p>Arahkan kamera ke Kode QR di kelas Anda.</p></div>
+            </div>
+          </main>
+
+          <footer className="z-10 w-full text-center py-4"><h2 className="text-xs font-bold text-slate-300 tracking-wide">SMP Negeri 1 Pagaden</h2></footer>
+
+          {isModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-md" style={{backgroundColor: 'rgba(5, 8, 18, 0.85)'}}>
+              <div className="relative w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden flex flex-col" style={{backgroundColor: '#0f172a', border: '1px solid #1e293b'}}>
+                
+                <div className="flex items-center justify-between px-5 py-4 border-b" style={{borderColor: '#1e293b', backgroundColor: '#111827'}}>
+                  <span className="text-sm font-bold text-slate-200">
+                      {modalPhase === 'PERMISSION' ? 'Otorisasi' : 
+                       modalPhase === 'SCANNING' ? 'Pindai QR' : 
+                       modalPhase === 'PIN_VERIFICATION' ? 'Akses Keamanan' :
+                       modalPhase === 'SELECT_CLASS' ? 'Konfigurasi Ruangan' : 'Sistem'}
+                  </span>
+                  <button onClick={handleCloseModal} className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"><CloseIcon className="w-6 h-6" /></button>
+                </div>
+
+                <div className="p-5 flex flex-col items-center justify-center min-h-[300px]">
+                  
+                  {modalPhase === 'PERMISSION' && (
+                    <div className="flex flex-col items-center justify-center py-10 text-center"><SpinnerIcon className="w-12 h-12 text-blue-400 mb-4" />
+                      <p className="text-sm font-semibold text-slate-200">Meminta Akses Kamera</p>
+                      <p className="text-[11px] text-slate-400 mt-2">Mohon ketuk <strong>"Allow/Izinkan"</strong> di browser Anda.</p>
+                    </div>
+                  )}
+
+                  {modalPhase === 'SCANNING' && (
+                    <div className="flex flex-col items-center w-full">
+                      <div className="relative w-64 h-64 rounded-2xl overflow-hidden bg-black border-2 border-blue-500/40 shadow-inner mb-4">
+                        <div id="reader" className="w-full h-full"></div>
+                        <div className="absolute inset-0 pointer-events-none p-4"><div className="w-full h-0.5 mt-8 shadow-[0_0_12px_#3b82f6] relative animate-scan-line" style={{background: 'linear-gradient(90deg, transparent, #3b82f6, transparent)'}}></div></div>
+                      </div>
+                      {cameras.length > 0 && (
+                        <div className="w-full mt-2">
+                          <label className="block text-[10px] text-slate-400 font-bold mb-1.5 uppercase text-center">Ganti Kamera Jika Buram/Salah</label>
+                          <select value={selectedCameraId} onChange={(e) => setSelectedCameraId(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500 text-center">
+                            {cameras.map((cam, idx) => (<option key={cam.id} value={cam.id}>{cam.label || `Kamera ${idx + 1}`}</option>))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {modalPhase === 'PIN_VERIFICATION' && (
+                    <div className={`flex flex-col items-center w-full animate-in zoom-in-95 duration-200 ${pinErrorShake ? 'animate-shake' : ''}`}>
+                        <div className="p-3 bg-blue-500/10 text-blue-400 border border-blue-500/30 rounded-full mb-3 shadow-[0_0_15px_rgba(59,130,246,0.2)]">
+                            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                        </div>
+                        <h3 className="text-lg font-black text-slate-200 mb-1 tracking-wide uppercase">Verifikasi Akses</h3>
+                        <p className="text-xs text-slate-400 mb-6 text-center">Otorisasi PIN untuk <strong className="text-blue-400">{dynamicRoomData?.nama_ruangan}</strong></p>
+                        
+                        <div className="flex gap-3 mb-8">
+                            {Array.from({length: dynamicRoomData?.pin.toString().length || 4}).map((_, i) => (
+                                <div key={i} className={`w-12 h-12 rounded-xl border-2 flex items-center justify-center text-2xl font-black transition-colors ${pinInput.length > i ? 'border-blue-500 bg-blue-500/20 text-blue-100 shadow-[0_0_10px_rgba(59,130,246,0.4)]' : 'border-slate-700 bg-slate-800 text-transparent'}`}>
+                                    {pinInput.length > i ? '•' : ''}
+                                </div>
+                            ))}
+                        </div>
+                        
+                        <div className="grid grid-cols-3 gap-4 w-full max-w-[240px]">
+                            {[1,2,3,4,5,6,7,8,9].map(num => (
+                                <button key={num} onClick={() => handlePinPress(num.toString())} className="h-14 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-200 text-xl font-bold shadow-md active:scale-95 transition-all">{num}</button>
+                            ))}
+                            <button onClick={() => setPinInput('')} className="h-14 rounded-full bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-sm font-bold shadow-md active:scale-95 transition-all">C</button>
+                            <button onClick={() => handlePinPress('0')} className="h-14 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-200 text-xl font-bold shadow-md active:scale-95 transition-all">0</button>
+                            <button onClick={() => setPinInput(prev => prev.slice(0,-1))} className="h-14 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 flex items-center justify-center shadow-md active:scale-95 transition-all">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l6.414 6.414a2 2 0 001.414.586H19a2 2 0 002-2V7a2 2 0 00-2-2h-8.172a2 2 0 00-1.414.586L3 12z"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                  )}
+
+                  {modalPhase === 'SELECT_CLASS' && (
+                    <div className="flex flex-col items-center w-full animate-in slide-in-from-right-4 duration-300">
+                        <div className="p-3 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-full mb-3 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+                            <LocationIcon className="w-8 h-8" />
+                        </div>
+                        <h3 className="text-xl font-black text-slate-200 mb-1 uppercase tracking-wide">{dynamicRoomData?.nama_ruangan}</h3>
+                        <p className="text-[10px] text-slate-400 mb-4 text-center leading-relaxed">Sistem mendeteksi Anda di ruang khusus. Pilih kelas mana yang sedang Anda bawa ke ruangan ini.</p>
+                        
+                        {(() => {
+                            const uniqueClasses = Array.from(new Set(Object.values(localCache?.classes || {}).map(c => c.nama_kelas)));
+                            
+                            const groupedClasses = {};
+                            uniqueClasses.forEach(className => {
+                                const upperName = className.toUpperCase();
+                                let gradeKey = "Kelas Lainnya";
+                                let gradeNum = 99; 
+                                
+                                if (upperName.includes("VIII")) { gradeKey = "Tingkat 8 (VIII)"; gradeNum = 8; }
+                                else if (upperName.includes("VII")) { gradeKey = "Tingkat 7 (VII)"; gradeNum = 7; }
+                                else if (upperName.includes("IX")) { gradeKey = "Tingkat 9 (IX)"; gradeNum = 9; }
+                                
+                                if (!groupedClasses[gradeKey]) {
+                                    groupedClasses[gradeKey] = { num: gradeNum, classes: [] };
+                                }
+                                groupedClasses[gradeKey].classes.push(className);
+                            });
+
+                            const sortedGroups = Object.keys(groupedClasses).sort((a, b) => groupedClasses[a].num - groupedClasses[b].num);
+
+                            return (
+                                <div className="w-full max-h-72 overflow-y-auto pr-2 custom-scrollbar">
+                                    {sortedGroups.map(groupKey => {
+                                        const sortedClasses = groupedClasses[groupKey].classes.sort((a, b) => a.localeCompare(b));
+                                        
+                                        return (
+                                            <div key={groupKey} className="mb-4">
+                                                <h4 className="text-[10px] font-black text-slate-400 mb-2 uppercase tracking-widest border-b border-slate-700/50 pb-1">{groupKey}</h4>
+                                                <div className="grid grid-cols-3 gap-2">
+                                                    {sortedClasses.map(namaKelas => (
+                                                        <button 
+                                                            key={namaKelas} 
+                                                            onClick={() => handleDynamicClassSelect(namaKelas)} 
+                                                            className="p-2 rounded-xl bg-slate-800 border border-slate-700 hover:border-blue-500 hover:bg-slate-700 active:bg-blue-600 transition-all flex justify-center items-center shadow-md active:scale-95"
+                                                        >
+                                                            <span className="text-xs font-bold text-slate-200 truncate w-full text-center">
+                                                                {namaKelas.replace(/Kelas\s/i, '')}
+                                                            </span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            );
+                        })()}
+                    </div>
+                  )}
+
+                  {modalPhase === 'NO_SCHEDULE' && (
+                    <div className="flex flex-col items-center text-center w-full animate-in fade-in zoom-in-95 duration-300">
+                      <div className="p-4 bg-amber-500/10 text-amber-500 border border-amber-500/30 rounded-full mb-4 shadow-lg shadow-amber-900/20">
+                        <AlertIcon className="w-12 h-12" />
+                      </div>
+                      <h3 className="text-xl font-black text-amber-400 mb-2 uppercase tracking-wide">Tidak Ada Jadwal</h3>
+                      <p className="text-[11px] text-slate-300 bg-slate-800/50 border border-slate-700 rounded-xl p-4 mb-6 w-full leading-relaxed shadow-inner text-justify">
+                        Sistem tidak menemukan jadwal aktif Anda di <span className="font-bold text-white">{scanResult?.ruang_belajar}</span>. Silakan pindai di waktu KBM yang sesuai atau infokan pada admin apabila terdapat kesalahan jadwal.
+                      </p>
+                      <div className="flex flex-col gap-3 w-full">
+                        <button 
+                          onClick={() => {
+                            setScannedToken('');
+                            setScanResult(null);
+                            setDynamicRoomData(null);
+                            setModalPhase('SCANNING');
+                          }} 
+                          className="w-full py-3.5 rounded-xl font-bold text-sm shadow-md text-white transition-transform active:scale-95 bg-slate-700 hover:bg-slate-600 border border-slate-600"
+                        >
+                          Kembali Pindai QR
+                        </button>
+                        <button 
+                          onClick={() => setModalPhase('FORM')}
+                          className="text-[10px] text-slate-500 hover:text-slate-300 underline underline-offset-2 transition-colors mt-2 pb-1"
+                        >
+                          Tetap isi presensi darurat secara manual
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {}
+                  {modalPhase === 'FORM' && scanResult && (
+                    <div className="w-full animate-in fade-in zoom-in-95 duration-300">
+                      
+                      {!isManualMode ? (
+                        <div className="rounded-2xl p-4 mb-4 shadow-lg relative overflow-hidden border" style={{background: 'linear-gradient(135deg, #1e293b, #0f172a)', borderColor: '#334155'}}>
+                          <div className="flex flex-col gap-2.5 mb-3 pb-3 border-b" style={{borderColor: 'rgba(51, 65, 85, 0.6)'}}>
+                            <div className="flex justify-between items-center w-full">
+                              <div className="flex items-center gap-2.5">
+                                <div className="relative flex-shrink-0">
+                                  <div className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-75"></div>
+                                  <div className="relative w-2.5 h-2.5 rounded-full bg-emerald-500"></div>
+                                </div>
+                                <span className="text-sm font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300 tracking-wide uppercase">
+                                  {scanResult.nama_kelas}
+                                </span>
+                              </div>
+                              <div className="bg-indigo-600/30 border border-indigo-500/50 text-indigo-200 text-xs font-extrabold px-3 py-1.5 rounded-lg shadow-inner">
+                                Jam Ke: {scanResult.jam_ke}
+                              </div>
+                            </div>
+                            <div className="flex">
+                              <span className="bg-slate-800/80 text-slate-400 text-[10px] font-semibold px-2.5 py-1 rounded-md border border-slate-700/60">
+                                Mapel Ke-{scanResult.mapel_ke}
+                              </span>
+                            </div>
+                          </div>
+                          
+                          <h4 className="text-base font-extrabold text-white mt-3 leading-tight">{scanResult.teacherName}</h4>
+                          <p className="text-xs text-blue-300 font-medium mt-1.5 flex items-center gap-1.5"><BookIcon /> {scanResult.subject}</p>
+                          
+                          <div className="flex items-center gap-2 mt-3.5 pt-1 text-[10px] text-slate-400 font-medium">
+                            <span className="flex items-center gap-1"><ClockIcon /> {scanResult.waktu_mulai} - {scanResult.waktu_selesai} WIB</span>
+                            <span className="text-slate-600">•</span>
+                            <span className="flex items-center gap-1"><LocationIcon /> {scanResult.ruang_belajar}</span>
+                          </div>
+
+                          {scanResult.nextTeacher && (
+                            <div className="mt-4 pt-3" style={{borderTop: '1px solid rgba(51, 65, 85, 0.6)'}}>
+                              <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-1 flex items-center gap-1"><NextIcon /> Selanjutnya:</p>
+                              <p className="text-[11px] text-slate-300 truncate">
+                                <span className="font-bold text-slate-200">{scanResult.nextTeacher.nama}</span> <span className="text-slate-500">({scanResult.nextTeacher.mapel})</span>
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="rounded-2xl p-4 mb-4 shadow-lg relative overflow-hidden border border-amber-500/30" style={{background: 'linear-gradient(135deg, #1e293b, #0f172a)'}}>
+                            <div className="flex items-center gap-2 mb-2 text-amber-400">
+                                <AlertIcon className="w-5 h-5" />
+                                <span className="text-xs font-bold uppercase tracking-wider">Jadwal Tidak Ditemukan</span>
+                            </div>
+                            <p className="text-[10px] text-slate-300 mb-4 leading-relaxed">Sistem tidak menemukan jadwal aktif. Silakan isi detail presensi secara manual untuk <strong className="text-white px-1.5 py-0.5 bg-slate-800 rounded">{scanResult.nama_kelas}</strong>.</p>
+                            
+                            <div className="space-y-3.5">
+                                {manualFormError && (
+                                    <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-[10px] p-2 rounded-lg text-center font-bold">
+                                        {manualFormError}
+                                    </div>
+                                )}
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-[9px] text-slate-400 font-bold uppercase">Pendidik</label>
+                                    <select value={manualForm.kode_guru} onChange={e => {setManualForm({...manualForm, kode_guru: e.target.value}); setManualFormError('');}} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white outline-none focus:border-blue-500">
+                                        <option value="">-- Pilih Nama Guru --</option>
+                                        {localCache && localCache.master_guru && Object.entries(localCache.master_guru).map(([kode, data]) => (
+                                            <option key={kode} value={kode}>{data.nama}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-[9px] text-slate-400 font-bold uppercase">Mata Pelajaran</label>
+                                    <select value={manualForm.kode_mapel} onChange={e => {setManualForm({...manualForm, kode_mapel: e.target.value}); setManualFormError('');}} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white outline-none focus:border-blue-500">
+                                        <option value="">-- Pilih Mata Pelajaran --</option>
+                                        {localCache && localCache.master_mapel && Object.entries(localCache.master_mapel).map(([kode, mapel]) => (
+                                            <option key={kode} value={kode}>{mapel}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-[9px] text-slate-400 font-bold uppercase">Jam Ke</label>
+                                        <input type="text" placeholder="Misal: 1-2" value={manualForm.jam_ke} onChange={e => {setManualForm({...manualForm, jam_ke: e.target.value}); setManualFormError('');}} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white outline-none focus:border-blue-500 placeholder:text-slate-600" />
+                                    </div>
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-[9px] text-slate-400 font-bold uppercase">Mapel Ke</label>
+                                        <input type="number" placeholder="Misal: 1" value={manualForm.mapel_ke} onChange={e => {setManualForm({...manualForm, mapel_ke: e.target.value}); setManualFormError('');}} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white outline-none focus:border-blue-500 placeholder:text-slate-600" />
+                                    </div>
+                                </div>
+                                
+                                <datalist id="jamList">
+                                    {Array.from({length: 24}, (_, i) => <option key={i} value={String(i).padStart(2, '0')} />)}
+                                </datalist>
+                                <datalist id="menitList">
+                                    {['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55'].map(m => <option key={m} value={m} />)}
+                                </datalist>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-[9px] text-slate-400 font-bold uppercase">Mulai (WIB)</label>
+                                        <div className="flex items-center gap-1">
+                                            <input type="text" inputMode="numeric" list="jamList" placeholder="HH" maxLength="2" value={manualForm.waktu_mulai_hh} onChange={e => {setManualForm({...manualForm, waktu_mulai_hh: e.target.value.replace(/\D/g, '')}); setManualFormError('');}} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white outline-none focus:border-blue-500 text-center" />
+                                            <span className="text-slate-400 font-bold">:</span>
+                                            <input type="text" inputMode="numeric" list="menitList" placeholder="MM" maxLength="2" value={manualForm.waktu_mulai_mm} onChange={e => {setManualForm({...manualForm, waktu_mulai_mm: e.target.value.replace(/\D/g, '')}); setManualFormError('');}} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white outline-none focus:border-blue-500 text-center" />
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-[9px] text-slate-400 font-bold uppercase">Selesai (WIB)</label>
+                                        <div className="flex items-center gap-1">
+                                            <input type="text" inputMode="numeric" list="jamList" placeholder="HH" maxLength="2" value={manualForm.waktu_selesai_hh} onChange={e => {setManualForm({...manualForm, waktu_selesai_hh: e.target.value.replace(/\D/g, '')}); setManualFormError('');}} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white outline-none focus:border-blue-500 text-center" />
+                                            <span className="text-slate-400 font-bold">:</span>
+                                            <input type="text" inputMode="numeric" list="menitList" placeholder="MM" maxLength="2" value={manualForm.waktu_selesai_mm} onChange={e => {setManualForm({...manualForm, waktu_selesai_mm: e.target.value.replace(/\D/g, '')}); setManualFormError('');}} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white outline-none focus:border-blue-500 text-center" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                      )}
+
+                      <div className="space-y-4 w-full">
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                            Kegiatan Pembelajaran Sesi Ini <span className="text-red-500 text-xs">*</span>
+                          </label>
+                          <textarea 
+                            value={kegiatan} 
+                            onChange={(e) => {
+                              setKegiatan(e.target.value);
+                              if (e.target.value.trim() !== '') setKegiatanError(false);
+                            }} 
+                            placeholder="Tulis ringkasan kegiatan belajar disini..." 
+                            className={`w-full bg-slate-900 border rounded-xl p-3 text-sm text-white placeholder:text-slate-600 transition-all resize-none h-20 outline-none ${kegiatanError ? 'border-red-500 focus:border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]' : 'border-slate-700 focus:border-blue-500'}`}
+                          ></textarea>
+                          {kegiatanError && (
+                            <span className="text-[10px] text-red-400 font-medium animate-pulse mt-0.5">
+                              Keterangan kegiatan pembelajaran wajib diisi sebelum mengirim presensi.
+                            </span>
+                          )}
+                        </div>
+                        
+                        <div className="flex flex-col gap-3 p-3 border border-slate-700 rounded-xl transition-colors" style={{backgroundColor: '#131e33'}}>
+                          <label className="flex items-center justify-between cursor-pointer">
+                            <div className="flex flex-col">
+                              <span className="text-sm font-semibold text-slate-200">Guru Pengganti (Inval)</span>
+                              <span className="text-[10px] text-slate-400">Aktifkan jika Anda menggantikan guru lain.</span>
+                            </div>
+                            <div className="relative inline-flex items-center">
+                              <input type="checkbox" checked={isPengganti} onChange={(e) => {
+                                setIsPengganti(e.target.checked);
+                                if (!e.target.checked) {
+                                  setPenggantiSearch('');
+                                  setSelectedPenggantiName('');
+                                  setSelectedPenggantiId(''); // UPDATE: Reset ID
+                                  setPenggantiError(false);
+                                }
+                              }} className="sr-only peer" />
+                              <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
+                            </div>
+                          </label>
+
+                          {isPengganti && (
+                            <div className="flex flex-col gap-1.5 relative pt-2 border-t border-slate-700/50 animate-in fade-in duration-300">
+                                <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Cari Nama Anda <span className="text-red-500">*</span></label>
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        value={penggantiSearch}
+                                        onChange={(e) => {
+                                            setPenggantiSearch(e.target.value);
+                                            setIsPenggantiDropdownOpen(true);
+                                            setSelectedPenggantiName(''); 
+                                            setSelectedPenggantiId(''); // UPDATE: Reset ID
+                                            setPenggantiError(false);
+                                        }}
+                                        onFocus={() => setIsPenggantiDropdownOpen(true)}
+                                        placeholder="Ketik nama Anda..."
+                                        className={`w-full bg-slate-900 border ${penggantiError ? 'border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]' : 'border-slate-700 focus:border-blue-500'} rounded-xl p-3 text-sm text-slate-200 outline-none relative z-20`}
+                                    />
+                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none z-20 text-slate-400">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                                    </div>
+                                </div>
+                                
+                                {isPenggantiDropdownOpen && (
+                                    <>
+                                        <div className="fixed inset-0 z-10" onClick={() => setIsPenggantiDropdownOpen(false)}></div>
+                                        <div className="absolute top-full left-0 right-0 mt-1 z-20 bg-slate-800 border border-slate-700 rounded-xl max-h-40 overflow-y-auto shadow-2xl">
+                                            {teacherList.filter(t => t.nama.toLowerCase().includes(penggantiSearch.toLowerCase())).length > 0 ? (
+                                                teacherList.filter(t => t.nama.toLowerCase().includes(penggantiSearch.toLowerCase())).map(t => (
+                                                    <div
+                                                        key={t.id}
+                                                        onClick={() => {
+                                                            setSelectedPenggantiName(t.nama);
+                                                            setSelectedPenggantiId(t.id); // UPDATE: Menyimpan Kode Guru
+                                                            setPenggantiSearch(t.nama);
+                                                            setIsPenggantiDropdownOpen(false);
+                                                            setPenggantiError(false);
+                                                        }}
+                                                        className="p-3 text-sm text-slate-200 hover:bg-slate-700 hover:text-blue-400 cursor-pointer border-b border-slate-700/50 last:border-0 transition-colors"
+                                                    >
+                                                        <span className="block font-semibold">{t.nama}</span>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <div className="p-3 text-sm text-slate-500 italic text-center">Nama tidak ditemukan</div>
+                                            )}
+                                        </div>
+                                    </>
+                                )}
+                                {penggantiError && (
+                                    <span className="text-[10px] text-red-400 font-medium animate-pulse mt-0.5">
+                                        Wajib memilih nama guru pengganti dari daftar.
+                                    </span>
+                                )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <button onClick={() => {
+                        if (isManualMode) {
+                           if (!manualForm.kode_guru || !manualForm.kode_mapel || !manualForm.jam_ke || !manualForm.mapel_ke || !manualForm.waktu_mulai_hh || !manualForm.waktu_mulai_mm || !manualForm.waktu_selesai_hh || !manualForm.waktu_selesai_mm) {
+                               setManualFormError('Semua kolom manual (Pendidik, Mapel, Jam, Waktu) wajib diisi.');
+                               return;
+                           }
+                           
+                           const isValidTime = (hh, mm) => { const h = parseInt(hh, 10); const m = parseInt(mm, 10); return !isNaN(h) && !isNaN(m) && h >= 0 && h <= 23 && m >= 0 && m <= 59; };
+                           if (!isValidTime(manualForm.waktu_mulai_hh, manualForm.waktu_mulai_mm) || !isValidTime(manualForm.waktu_selesai_hh, manualForm.waktu_selesai_mm)) {
+                               setManualFormError('Format waktu tidak valid (Jam: 00-23, Menit: 00-59).');
+                               return;
+                           }
+                        }
+                        
+                        let hasError = false;
+                        if (kegiatan.trim() === '') {
+                          setKegiatanError(true);
+                          hasError = true;
+                        }
+                        
+                        if (isPengganti && !selectedPenggantiName) {
+                          setPenggantiError(true);
+                          hasError = true;
+                        }
+
+                        if (!hasError) {
+                          setShowConfirmation(true);
+                        }
+                      }} className="mt-6 w-full py-3.5 rounded-xl font-bold text-sm shadow-lg text-white transition-transform active:scale-95" style={{background: 'linear-gradient(90deg, #2563eb, #4f46e5)'}}>
+                        Kirim Presensi Sekarang
+                      </button>
+
+                      <div className="mt-4 text-center">
+                        <p className="text-[11px] text-slate-400">
+                          Bukan jadwal Anda?{' '}
+                          <button 
+                            onClick={() => {
+                              setScannedToken('');
+                              setKegiatan('');
+                              setKegiatanError(false);
+                              setIsPengganti(false);
+                              setPenggantiSearch('');
+                              setSelectedPenggantiName('');
+                              setSelectedPenggantiId(''); // UPDATE: Reset
+                              setPenggantiError(false);
+                              setScanResult(null);
+                              setShowConfirmation(false);
+                              setDynamicRoomData(null);
+                              setModalPhase('SCANNING');
+                            }}
+                            className="text-blue-400 font-bold hover:underline inline-flex items-center gap-1 transition-colors"
+                          >
+                            <RefreshIcon /> Klik disini untuk scan ulang
+                          </button>
+                        </p>
+                      </div>
+                      
+                    </div>
+                  )}
+
+                  {showConfirmation && modalPhase === 'FORM' && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-md" style={{backgroundColor: 'rgba(15, 23, 42, 0.95)'}}>
+                      <div className="w-full max-w-md max-h-[85vh] flex flex-col border border-slate-200 rounded-2xl shadow-2xl animate-in zoom-in-95 duration-200 bg-slate-50 overflow-hidden">
+                        
+                        <div className="p-5 overflow-y-auto flex-1">
+                          <div className="flex items-center gap-3 mb-5 text-red-600">
+                            <AlertIcon className="w-7 h-7 flex-shrink-0" />
+                            <h3 className="font-black text-base uppercase tracking-wide">Konfirmasi Integritas</h3>
+                          </div>
+                          
+                          <p className="text-base font-bold text-slate-800 mb-5 leading-relaxed">
+                            Apakah Anda mengonfirmasi bahwa presensi ini diisi langsung oleh Guru yang bersangkutan di <strong className="text-blue-600">{scanResult?.ruang_belajar}</strong> sesuai jadwal?
+                          </p>
+                          
+                          <div className="bg-red-50 border border-red-200 p-4 rounded-xl mb-4 shadow-sm">
+                            <p className="text-sm font-bold text-red-600 leading-relaxed text-justify">
+                              Perhatian: Mewakilkan presensi kepada siswa, mengisi di luar ruang kelas, atau menggunakan duplikat QR Code merupakan pelanggaran integritas akademik dan kode etik guru.
+                            </p>
+                          </div>
+                          
+                          <div className="border-t border-slate-200 pt-3">
+                            <p className="text-[10px] text-slate-500 leading-relaxed text-justify">
+                              Sistem mencatat rekam jejak digital secara otomatis. Apabila terdapat kendala atau penyalahgunaan, mohon segera laporkan kepada Kepala Sekolah.
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div className="p-4 bg-slate-50 border-t border-slate-100 shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
+                          <div className="flex flex-col gap-2.5">
+                            <button 
+                              onClick={() => {
+                                setShowConfirmation(false);
+                                submitData();
+                              }}
+                              className="w-full py-3.5 rounded-xl font-bold text-sm shadow-md text-white transition-transform active:scale-95 text-center leading-snug px-3" 
+                              style={{background: 'linear-gradient(90deg, #0284c7, #2563eb)'}}
+                            >
+                              Ya, Saya Guru Bersangkutan dan mengisi di kelas
+                            </button>
+                            <button 
+                              onClick={() => setShowConfirmation(false)}
+                              className="w-full py-3 rounded-xl font-bold text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-200 transition-colors"
+                            >
+                              Batal
+                            </button>
+                          </div>
+                        </div>
+
+                      </div>
+                    </div>
+                  )}
+
+                  {modalPhase === 'LOADING' && (
+                    <div className="flex flex-col items-center justify-center py-10"><SpinnerIcon className="w-12 h-12 text-blue-400 mb-4" /><p className="text-xs text-slate-300">Memproses Data...</p></div>
+                  )}
+
+                  {modalPhase === 'ERROR' && (
+                    <div className="flex flex-col items-center text-center w-full">
+                      <div className="p-3 bg-rose-500/10 text-rose-400 border border-rose-500/30 rounded-full mb-3"><CloseIcon className="w-8 h-8" /></div>
+                      <p className="text-xs text-slate-300 bg-rose-500/10 border border-rose-500/20 rounded-xl p-3 mb-5 w-full">{apiError}</p>
+                      <button onClick={handleStartCamera} className="w-full py-3 rounded-xl bg-slate-800 border border-slate-700 text-cyan-300 font-bold text-xs">Coba Lagi</button>
+                    </div>
+                  )}
+
+                  {modalPhase === 'SUCCESS_OFFLINE' && scanResult && (
+                    <div className="flex flex-col items-center text-center w-full">
+                      <div className="relative mb-3">
+                        <div className="absolute inset-0 rounded-full bg-amber-500/20 animate-ping"></div>
+                        <div className="relative p-3 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded-full">
+                          <CloudSyncIcon className="w-12 h-12" />
+                        </div>
+                      </div>
+                      <h3 className="text-xl font-extrabold text-amber-400 mb-1">Tersimpan Lokal</h3>
+                      <p className="text-[10px] text-amber-200/70 mb-4 px-2">Koneksi terputus. Data aman di perangkat Anda dan akan disinkronkan otomatis saat online.</p>
+                      
+                      <div className="w-full rounded-2xl p-4 text-left space-y-3 text-xs mb-6" style={{backgroundColor: '#162331', border: '1px solid #1e3a47'}}>
+                        <div><span className="text-slate-400 text-[10px] uppercase font-semibold">Nama Pendidik</span><p className="text-sm font-bold text-slate-100 mt-0.5">{scanResult.teacherName}</p></div>
+                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-700/50">
+                          <div><span className="text-slate-400 text-[10px] uppercase">Waktu Simpan</span><p className="font-medium text-amber-400 font-mono mt-0.5">{scanResult.timestamp}</p></div>
+                        </div>
+                      </div>
+                      <button onClick={handleCloseModal} className="w-full py-3.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-lg shadow-amber-900/20 transition-colors">Selesai (Mengajar Kembali)</button>
+                    </div>
+                  )}
+
+                  {modalPhase === 'SUCCESS' && scanResult && (
+                    <div className="flex flex-col items-center text-center w-full">
+                      <div className="relative mb-3"><div className="absolute inset-0 rounded-full bg-emerald-500/20 animate-ping"></div><div className="relative p-3 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-full"><CheckCircleIcon className="w-12 h-12" /></div></div>
+                      <h3 className="text-xl font-extrabold text-emerald-400 mb-4">Berhasil!</h3>
+                      <div className="w-full rounded-2xl p-4 text-left space-y-3 text-xs mb-6" style={{backgroundColor: '#162331', border: '1px solid #1e3a47'}}>
+                        <div><span className="text-slate-400 text-[10px] uppercase font-semibold">Nama Pendidik</span><p className="text-sm font-bold text-slate-100 mt-0.5">{scanResult.teacherName}</p></div>
+                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-700/50"><div><span className="text-slate-400 text-[10px] uppercase">Waktu Tercatat</span><p className="font-medium text-emerald-400 font-mono mt-0.5">{scanResult.timestamp}</p></div></div>
+                      </div>
+                      <button onClick={handleCloseModal} className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs">Selesai</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isLeaveModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-md" style={{backgroundColor: 'rgba(5, 8, 18, 0.85)'}}>
+              <div className="relative w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" style={{backgroundColor: '#0f172a', border: '1px solid #1e293b'}}>
+                
+                <div className="flex items-center justify-between px-5 py-4 border-b" style={{borderColor: '#1e293b', backgroundColor: '#111827'}}>
+                  <span className="text-sm font-bold text-amber-400 flex items-center gap-2"><DocumentIcon className="w-4 h-4"/> Pengajuan Izin Pendidik</span>
+                  <button onClick={() => setIsLeaveModalOpen(false)} className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"><CloseIcon className="w-6 h-6" /></button>
+                </div>
+
+                <div className="p-5 overflow-y-auto">
+                  {leaveModalPhase === 'LEAVE_FORM' && (
+                    <div className="space-y-4 animate-in fade-in duration-300">
+                      
+                      <div className="flex flex-col gap-1.5 relative">
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Nama Guru</label>
+                        <div className="relative">
+                          <input 
+                            type="text" 
+                            value={teacherSearch}
+                            onChange={(e) => {
+                              setTeacherSearch(e.target.value);
+                              setIsTeacherDropdownOpen(true);
+                              if (leaveForm.teacherId) setLeaveForm({...leaveForm, teacherId: '', sessions: []});
+                            }}
+                            onFocus={() => setIsTeacherDropdownOpen(true)}
+                            placeholder="Ketik atau cari nama Anda..."
+                            className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-slate-200 focus:border-amber-500 outline-none relative z-20"
+                          />
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none z-20 text-slate-400">
+                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                          </div>
+                        </div>
+
+                        {isTeacherDropdownOpen && (
+                          <>
+                            <div className="fixed inset-0 z-10" onClick={() => setIsTeacherDropdownOpen(false)}></div>
+                            <div className="absolute top-full left-0 right-0 mt-1 z-20 bg-slate-800 border border-slate-700 rounded-xl max-h-48 overflow-y-auto shadow-2xl">
+                              {teacherList.filter(t => t.nama.toLowerCase().includes(teacherSearch.toLowerCase())).length > 0 ? (
+                                teacherList.filter(t => t.nama.toLowerCase().includes(teacherSearch.toLowerCase())).map(t => (
+                                  <div 
+                                    key={t.id} 
+                                    onClick={() => {
+                                      setLeaveForm({...leaveForm, teacherId: t.id, sessions: []});
+                                      setTeacherSearch(t.nama);
+                                      setIsTeacherDropdownOpen(false);
+                                    }}
+                                    className="p-3 text-sm text-slate-200 hover:bg-slate-700 hover:text-amber-400 cursor-pointer border-b border-slate-700/50 last:border-0 transition-colors"
+                                  >
+                                    <span className="block font-semibold">{t.nama}</span>
+                                    <span className="text-[10px] text-slate-400">NIP: {t.nip !== '-' ? t.nip : 'Non-ASN'}</span>
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="p-3 text-sm text-slate-500 italic text-center">Nama tidak ditemukan</div>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Tanggal (Hari Ini)</label>
+                          <div className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm text-slate-400 cursor-not-allowed">
+                             {dateStr}
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Jenis Izin</label>
+                          <select value={leaveForm.type} onChange={(e) => setLeaveForm({...leaveForm, type: e.target.value, reason: '', assigner: 'Kepala Sekolah'})} className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-slate-200 focus:border-amber-500 outline-none">
+                            <option value="Sakit">Sakit</option>
+                            <option value="Keperluan Pribadi">Keperluan Pribadi</option>
+                            <option value="Dinas Luar">Dinas Luar</option>
+                            <option value="Instruksi Pimpinan">Instruksi Pimpinan</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="pt-2">
+                        <label className="flex items-center justify-between p-3 border border-slate-700 rounded-xl cursor-pointer transition-colors" style={{backgroundColor: leaveForm.isFullDay ? '#1e293b' : '#0f172a'}}>
+                          <div className="flex flex-col">
+                            <span className="text-sm font-bold text-slate-200">Izin Seharian Penuh</span>
+                            <span className="text-[10px] text-slate-400">Apabila izin seharian, silakan aktifkan.</span>
+                          </div>
+                          <div className="relative inline-flex items-center">
+                            <input type="checkbox" checked={leaveForm.isFullDay} onChange={(e) => setLeaveForm({...leaveForm, isFullDay: e.target.checked, sessions: []})} className="sr-only peer" />
+                            <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                          </div>
+                        </label>
+                      </div>
+
+                      {leaveForm.teacherId && (
+                        <div className={`mt-4 p-3 rounded-xl border border-blue-500/30 bg-blue-900/10 animate-in slide-in-from-top-2 transition-all duration-300 ${leaveForm.isFullDay ? 'opacity-50 grayscale pointer-events-none' : ''}`}>
+                          <p className="text-[10px] text-blue-400 font-bold uppercase tracking-wider mb-2">Centang Sesi Yang Ditinggalkan:</p>
+                          <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                            {getTeacherSchedules(leaveForm.teacherId).length > 0 ? (
+                              getTeacherSchedules(leaveForm.teacherId).map(sched => (
+                                <label key={sched.id} className="flex items-start gap-3 p-2.5 rounded-lg border border-slate-700 cursor-pointer hover:bg-slate-800/50 transition-colors" style={{backgroundColor: leaveForm.sessions.includes(sched.id) ? '#1e3a5f' : 'transparent'}}>
+                                  <input type="checkbox" checked={leaveForm.sessions.includes(sched.id)} onChange={() => handleLeaveSessionToggle(sched.id)} className="mt-1" />
+                                  <div className="flex flex-col w-full">
+                                    <div className="flex justify-between items-center w-full"><span className="text-xs font-bold text-slate-200">{sched.nama_kelas}</span><span className="text-[9px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-300">Jam {sched.jam_ke}</span></div>
+                                    <span className="text-[10px] text-slate-400 mt-0.5">{sched.mata_pelajaran} • {sched.jam_mulai} - {sched.jam_selesai}</span>
+                                  </div>
+                                </label>
+                              ))
+                            ) : (
+                              <p className="text-xs text-slate-400 italic p-2 text-center border border-dashed border-slate-700 rounded-lg">Tidak ada jadwal tercatat pada hari ini.</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      <div key={leaveForm.type} className="flex flex-col gap-3 pt-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                        {leaveForm.type === 'Sakit' && (
+                          <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Jenis Sakit / Keterangan Medis <span className="text-red-500 text-xs">*</span></label>
+                            <textarea value={leaveForm.reason} onChange={(e) => { setLeaveForm({...leaveForm, reason: e.target.value}); if(e.target.value.trim()) setLeaveReasonError(false); }} placeholder="Contoh: Demam, tifus, atau lampirkan surat keterangan dokter ke TU..." className={`w-full bg-slate-900 border rounded-xl p-3 text-sm text-white placeholder:text-slate-600 transition-all resize-none h-16 outline-none ${leaveReasonError ? 'border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]' : 'border-slate-700 focus:border-amber-500'}`}></textarea>
+                          </div>
+                        )}
+                        
+                        {leaveForm.type === 'Keperluan Pribadi' && (
+                          <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Detail Keperluan Pribadi <span className="text-red-500 text-xs">*</span></label>
+                            <textarea value={leaveForm.reason} onChange={(e) => { setLeaveForm({...leaveForm, reason: e.target.value}); if(e.target.value.trim()) setLeaveReasonError(false); }} placeholder="Contoh: Mengantar orang tua kontrol ke rumah sakit..." className={`w-full bg-slate-900 border rounded-xl p-3 text-sm text-white placeholder:text-slate-600 transition-all resize-none h-16 outline-none ${leaveReasonError ? 'border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]' : 'border-slate-700 focus:border-amber-500'}`}></textarea>
+                          </div>
+                        )}
+                        
+                        {leaveForm.type === 'Dinas Luar' && (
+                          <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Nama Kegiatan, Tempat & Penyelenggara <span className="text-red-500 text-xs">*</span></label>
+                            <textarea value={leaveForm.reason} onChange={(e) => { setLeaveForm({...leaveForm, reason: e.target.value}); if(e.target.value.trim()) setLeaveReasonError(false); }} placeholder="Contoh: Rapat MGMP Bahasa Indonesia di Disdik Kabupaten..." className={`w-full bg-slate-900 border rounded-xl p-3 text-sm text-white placeholder:text-slate-600 transition-all resize-none h-16 outline-none ${leaveReasonError ? 'border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]' : 'border-slate-700 focus:border-amber-500'}`}></textarea>
+                          </div>
+                        )}
+                        
+                        {leaveForm.type === 'Instruksi Pimpinan' && (
+                          <>
+                            <div className="flex flex-col gap-1.5">
+                              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Pemberi Instruksi / Tugas</label>
+                              <select value={leaveForm.assigner} onChange={(e) => setLeaveForm({...leaveForm, assigner: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-slate-200 focus:border-amber-500 outline-none">
+                                <option value="Kepala Sekolah">Kepala Sekolah</option>
+                                <option value="Wakasek Kurikulum">Wakasek Kurikulum</option>
+                                <option value="Wakasek Kesiswaan">Wakasek Kesiswaan</option>
+                                <option value="Wakasek Sarpras">Wakasek Sarpras</option>
+                                <option value="Wakasek Humas">Wakasek Humas</option>
+                              </select>
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Detail Instruksi <span className="text-red-500 text-xs">*</span></label>
+                              <textarea value={leaveForm.reason} onChange={(e) => { setLeaveForm({...leaveForm, reason: e.target.value}); if(e.target.value.trim()) setLeaveReasonError(false); }} placeholder="Contoh: Menyelesaikan tugas membuat laporan..." className={`w-full bg-slate-900 border rounded-xl p-3 text-sm text-white placeholder:text-slate-600 transition-all resize-none h-16 outline-none ${leaveReasonError ? 'border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]' : 'border-slate-700 focus:border-amber-500'}`}></textarea>
+                            </div>
+                          </>
+                        )}
+                        {leaveReasonError && (
+                          <span className="text-[10px] text-red-400 font-medium animate-pulse mt-0.5">
+                            Detail/alasan izin wajib diisi sebelum mengajukan.
+                          </span>
+                        )}
+                      </div>
+
+                      <button onClick={submitLeaveRequest} disabled={!leaveForm.teacherId || (!leaveForm.isFullDay && leaveForm.sessions.length === 0) || (leaveForm.isFullDay && getTeacherSchedules(leaveForm.teacherId).length === 0)} className="mt-4 w-full py-3.5 rounded-xl font-bold text-sm shadow-lg text-white transition-transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" style={{background: 'linear-gradient(90deg, #d97706, #b45309)'}}>Ajukan Perizinan</button>
+                    </div>
+                  )}
+
+                  {leaveModalPhase === 'LOADING_LEAVE' && (<div className="flex flex-col items-center justify-center py-12 animate-in fade-in duration-300"><SpinnerIcon className="w-12 h-12 text-amber-400 mb-4" /><p className="text-xs text-slate-300">Mengirim pengajuan izin...</p></div>)}
+                  
+                  {leaveModalPhase === 'SUCCESS_LEAVE_OFFLINE' && (
+                    <div className="flex flex-col items-center text-center w-full py-4 animate-in fade-in zoom-in-95 duration-300">
+                      <div className="relative mb-3"><div className="absolute inset-0 rounded-full bg-amber-500/20 animate-ping"></div><div className="relative p-3 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded-full"><CloudSyncIcon className="w-12 h-12" /></div></div>
+                      <h3 className="text-xl font-extrabold text-amber-400 mb-2">Tersimpan Lokal</h3>
+                      <p className="text-xs text-amber-200/70 mb-6 px-4 leading-relaxed">Koneksi terputus. Data perizinan aman di antrean dan akan dikirim otomatis ke server saat Anda online kembali.</p>
+                      <button onClick={() => setIsLeaveModalOpen(false)} className="w-full py-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-bold text-xs">Tutup Layar Ini</button>
+                    </div>
+                  )}
+
+                  {leaveModalPhase === 'SUCCESS_LEAVE' && (
+                    <div className="flex flex-col items-center text-center w-full py-4 animate-in fade-in zoom-in-95 duration-300">
+                      <div className="relative mb-3"><div className="absolute inset-0 rounded-full bg-emerald-500/20 animate-ping"></div><div className="relative p-3 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-full"><CheckCircleIcon className="w-12 h-12" /></div></div>
+                      <h3 className="text-xl font-extrabold text-emerald-400 mb-2">Pengajuan Berhasil!</h3>
+                      <p className="text-xs text-slate-300 mb-6 px-4 leading-relaxed">Data izin Anda telah tercatat pada server secara otomatis per jadwal kelas yang dipilih.</p>
+                      <button onClick={() => setIsLeaveModalOpen(false)} className="w-full py-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-bold text-xs">Tutup Layar Ini</button>
+                    </div>
+                  )}
+
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isHistoryModalOpen && (
+            <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center p-4 backdrop-blur-md" style={{backgroundColor: 'rgba(5, 8, 18, 0.85)'}}>
+              <div className="relative w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in slide-in-from-bottom-10 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200" style={{backgroundColor: '#0f172a', border: '1px solid #1e293b'}}>
+                
+                <div className="flex items-center justify-between px-5 py-4 border-b" style={{borderColor: '#1e293b', backgroundColor: '#111827'}}>
+                  <span className="text-sm font-bold text-slate-200 flex items-center gap-2"><HistoryIcon className="w-5 h-5 text-blue-400"/> Riwayat Hari Ini</span>
+                  <button onClick={() => setIsHistoryModalOpen(false)} className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"><CloseIcon className="w-6 h-6" /></button>
+                </div>
+
+                <div className="p-5 overflow-y-auto flex-1 bg-slate-900/50">
+                  
+                  <div className="mb-6">
+                    <h3 className="text-[10px] font-bold text-slate-400 mb-3 uppercase tracking-wider flex items-center gap-1">
+                      <CloudSyncIcon className="w-4 h-4 text-amber-500" /> Antrean Luring ({offlineQueue.length})
+                    </h3>
+                    {offlineQueue.length === 0 ? (
+                      <div className="p-3 bg-slate-800/30 border border-slate-700/30 rounded-xl text-center">
+                        <span className="text-[10px] text-slate-500">Tidak ada antrean tertunda.</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {offlineQueue.map((item, idx) => (
+                          <div key={idx} className="flex flex-col gap-1.5 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl shadow-sm">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <p className="text-xs font-bold text-amber-100">{item.payload.data_jadwal.teacherName}</p>
+                                <p className="text-[11px] text-amber-200/90 font-medium">{item.payload.data_jadwal.subject}</p>
+                              </div>
+                              <span className="text-[9px] font-mono bg-amber-500/20 text-amber-400 px-2 py-1 rounded-md border border-amber-500/30 flex-shrink-0 mt-0.5">{item.timestamp}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-[10px] text-amber-200/70 border-t border-amber-500/20 pt-2 mt-0.5">
+                              <span className="font-semibold text-amber-300">{item.payload.data_jadwal.nama_kelas}</span>
+                              <span className="flex items-center gap-1 font-mono bg-amber-900/40 px-1.5 py-0.5 rounded"><ClockIcon className="w-2.5 h-2.5"/> {item.payload.data_jadwal.waktu_mulai} - {item.payload.data_jadwal.waktu_selesai} WIB</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <h3 className="text-[10px] font-bold text-slate-400 mb-3 uppercase tracking-wider flex items-center gap-1">
+                      <CheckCircleIcon className="w-4 h-4 text-emerald-500" /> Sudah Terkirim ({sentHistory.length})
+                    </h3>
+                    {sentHistory.length === 0 ? (
+                      <div className="p-3 bg-slate-800/30 border border-slate-700/30 rounded-xl text-center">
+                        <span className="text-[10px] text-slate-500">Belum ada riwayat presensi hari ini.</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {sentHistory.map((item, idx) => (
+                          <div key={idx} className="flex flex-col gap-1.5 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl shadow-sm">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <p className="text-xs font-bold text-emerald-100">{item.teacherName}</p>
+                                <p className="text-[11px] text-emerald-200/90 font-medium">{item.subject}</p>
+                              </div>
+                              <span className="text-[9px] font-mono bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded-md border border-emerald-500/30 flex items-center gap-1 flex-shrink-0 mt-0.5">
+                                 <CheckCircleIcon className="w-3 h-3"/> {item.timestamp}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between text-[10px] text-emerald-200/70 border-t border-emerald-500/20 pt-2 mt-0.5">
+                              <span className="font-semibold text-emerald-300">{item.nama_kelas}</span>
+                              <span className="flex items-center gap-1 font-mono bg-emerald-900/40 px-1.5 py-0.5 rounded"><ClockIcon className="w-2.5 h-2.5"/> {item.waktu_mulai} - {item.waktu_selesai} WIB</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+    
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js')
+            .then(reg => console.log('TAPAK Service Worker Registered'))
+            .catch(err => console.warn('TAPAK SW Registration Failed:', err));
+        });
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>

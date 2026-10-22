@@ -585,10 +585,7 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
 
           {/* Sisi Kanan Baris 1: Info Hari Master & Tombol Kerapatan Tampilan */}
           <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border bg-emerald-50 text-emerald-900 border-emerald-200">
-              <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
-              <span>Jadwal {dayNameIndo} · {dayInfo.label}</span>
-            </div>
+
 
             {/* Tombol Pengatur Tata Letak Grid Adaptif */}
             <button
@@ -617,138 +614,7 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
           </div>
         </div>
 
-        {/* BARIS 2: Filter Status, Pencarian, & Opsi Pengurutan (Sorting) */}
-        <div className="p-2 px-3 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          {/* Sisi Kiri Baris 2: Pencarian & Filter Kehadiran */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Input Pencarian */}
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Cari kelas / ruang..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="pl-8 pr-7 py-1 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400 w-36 sm:w-44 shadow-2xs"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
-                  title="Hapus pencarian"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
 
-            {/* Segmented Filter Status dengan Badge Hitungan */}
-            <div className="flex items-center gap-0.5 bg-white p-0.5 border border-slate-200 rounded-lg shadow-2xs">
-              <button
-                onClick={() => setStatusFilter('all')}
-                className={`px-2 py-0.5 text-[11px] font-medium rounded transition-colors cursor-pointer flex items-center gap-1 ${
-                  statusFilter === 'all'
-                    ? 'bg-slate-900 text-white font-semibold'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                }`}
-                title="Tampilkan semua kelas"
-              >
-                <span>Semua</span>
-                <span className={`text-[10px] px-1 rounded-full ${statusFilter === 'all' ? 'bg-white/20' : 'bg-slate-100 text-slate-600'}`}>
-                  {statusCounts.all}
-                </span>
-              </button>
-              <button
-                onClick={() => setStatusFilter('hadir')}
-                className={`px-2 py-0.5 text-[11px] font-medium rounded transition-colors cursor-pointer flex items-center gap-1 ${
-                  statusFilter === 'hadir'
-                    ? 'bg-emerald-600 text-white font-semibold'
-                    : 'text-slate-600 hover:text-emerald-700 hover:bg-emerald-50'
-                }`}
-                title="Hanya kelas dengan guru hadir"
-              >
-                <span>Hadir</span>
-                <span className={`text-[10px] px-1 rounded-full font-bold ${statusFilter === 'hadir' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
-                  {statusCounts.hadir}
-                </span>
-              </button>
-              <button
-                onClick={() => setStatusFilter('belum')}
-                className={`px-2 py-0.5 text-[11px] font-medium rounded transition-colors cursor-pointer flex items-center gap-1 ${
-                  statusFilter === 'belum'
-                    ? 'bg-rose-600 text-white font-semibold'
-                    : 'text-slate-600 hover:text-rose-700 hover:bg-rose-50'
-                }`}
-                title="Hanya kelas yang belum ada absensi guru"
-              >
-                <span>Belum</span>
-                <span className={`text-[10px] px-1 rounded-full font-bold ${
-                  statusFilter === 'belum'
-                    ? 'bg-white/20 text-white'
-                    : statusCounts.belum > 0 ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-500'
-                }`}>
-                  {statusCounts.belum}
-                </span>
-              </button>
-              <button
-                onClick={() => setStatusFilter('infal')}
-                className={`px-2 py-0.5 text-[11px] font-medium rounded transition-colors cursor-pointer flex items-center gap-1 ${
-                  statusFilter === 'infal'
-                    ? 'bg-purple-600 text-white font-semibold'
-                    : 'text-slate-600 hover:text-purple-700 hover:bg-purple-50'
-                }`}
-                title="Hanya kelas dengan guru pengganti (infal)"
-              >
-                <span>Infal</span>
-                <span className={`text-[10px] px-1 rounded-full font-bold ${statusFilter === 'infal' ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-800'}`}>
-                  {statusCounts.infal}
-                </span>
-              </button>
-              <button
-                onClick={() => {
-                  setStatusFilter('zero');
-                  setSortBy('percent-asc');
-                }}
-                className={`px-2 py-0.5 text-[11px] font-medium rounded transition-colors cursor-pointer flex items-center gap-1 ${
-                  statusFilter === 'zero'
-                    ? 'bg-rose-700 text-white font-bold ring-1 ring-rose-300'
-                    : 'text-rose-700 hover:bg-rose-50'
-                }`}
-                title="Filter cepat kelas 0% Guru Hadir (Perlu Perhatian Piket)"
-              >
-                <span>0% Hadir</span>
-                <span className={`text-[10px] px-1 rounded-full font-bold ${
-                  statusFilter === 'zero'
-                    ? 'bg-white/20 text-white'
-                    : statusCounts.zero > 0 ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-500'
-                }`}>
-                  {statusCounts.zero}
-                </span>
-              </button>
-            </div>
-          </div>
-
-          {/* Sisi Kanan Baris 2: Dropdown / Opsi Pengurutan (Sorting) */}
-          <div className="flex items-center gap-1.5 self-start sm:self-auto shrink-0">
-            <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
-              <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
-              <span className="hidden sm:inline">Urutkan:</span>
-            </span>
-            <select
-              value={sortBy}
-              onChange={e => setSortBy(e.target.value as SortOption)}
-              aria-label="Pilih opsi urutan baris kelas"
-              className="text-xs bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-slate-800 font-semibold focus:outline-none focus:ring-1 focus:ring-slate-400 cursor-pointer shadow-2xs hover:bg-slate-50"
-            >
-              <option value="default">Urutan Standar (VII → IX)</option>
-              <option value="percent-asc">📉 % Guru Hadir (Terendah → Tertinggi)</option>
-              <option value="percent-desc">📈 % Guru Hadir (Tertinggi → Terendah)</option>
-              <option value="unattended-first">⚠️ Belum Absen Teratas (Prioritas)</option>
-              <option value="name-asc">Nama Kelas (A - Z)</option>
-              <option value="room">Lokasi Ruangan</option>
-            </select>
-          </div>
-        </div>
       </div>
 
       {/* Jika Hari Libur Akhir Pekan (Sabtu / Minggu): Tampilkan Banner Ramah */}

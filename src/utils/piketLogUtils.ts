@@ -94,13 +94,9 @@ export function buildPiketAttendanceLogItem(params: {
   // Tanggal display (contoh: "22-Okt-2026")
   const displayTanggal = formatToIndonesianDisplayDate(tanggal);
 
-  // Ruang belajar default
-  const matchedClass = classes.find(
-    c => c.namaKelas.toLowerCase() === schedule.namaKelas.toLowerCase()
-  );
-  const ruangBelajar = (matchedClass?.lokasiRuang && matchedClass.lokasiRuang.trim() !== '')
-    ? matchedClass.lokasiRuang
-    : 'Ruang Kelas';
+  // Ruang belajar statis "Ruang Kelas"
+  const ruangBelajar = 'Ruang Kelas';
+
 
   // Nama Guru & NIP jika ada
   const teacher = masterGuru.find(

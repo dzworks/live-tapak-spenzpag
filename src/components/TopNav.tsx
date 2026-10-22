@@ -20,6 +20,8 @@ interface TopNavProps {
   timeRangeText?: string;
   kbmStatusText?: string;
   kbmStatusColor?: string;
+  selectedDate?: string;
+  dayNameIndo?: string;
 }
 
 export const TopNav: React.FC<TopNavProps> = ({
@@ -40,6 +42,8 @@ export const TopNav: React.FC<TopNavProps> = ({
   timeRangeText = '07:00 - 14:00',
   kbmStatusText = 'KBM Berjalan Lancar',
   kbmStatusColor = 'text-emerald-300 bg-emerald-950/60 border-emerald-700/60',
+  selectedDate,
+  dayNameIndo,
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-slate-900 border-b border-slate-800 text-slate-100 shadow-md">
@@ -134,11 +138,7 @@ export const TopNav: React.FC<TopNavProps> = ({
               </span>
             </button>
 
-            {/* Live Clock WIB */}
-            <div className="hidden lg:flex items-center gap-1.5 text-xs font-mono text-slate-300 bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-700/60 tabular-nums">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>{wibTime}</span>
-            </div>
+
 
             {/* TV / Fullscreen Mode Toggle */}
             {onToggleFullscreen && (
@@ -226,7 +226,7 @@ export const TopNav: React.FC<TopNavProps> = ({
 
             <span className="text-slate-700 hidden min-[400px]:inline text-xs">·</span>
 
-            {/* 3. Jam Realtime WIB Digital */}
+            {/* 3. Jam Realtime WIB Digital & Hari Tanggal */}
             <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-0.5 rounded-md border border-emerald-500/40 shadow-inner shrink-0">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -236,6 +236,14 @@ export const TopNav: React.FC<TopNavProps> = ({
               <span className="text-emerald-400 font-mono font-black tracking-wider text-xs">
                 {wibTime}
               </span>
+              {(dayNameIndo || selectedDate) && (
+                <>
+                  <span className="text-slate-600 text-[10px] font-bold">·</span>
+                  <span className="text-emerald-300 font-mono font-bold text-xs tracking-tight">
+                    {[dayNameIndo, selectedDate].filter(Boolean).join(', ')}
+                  </span>
+                </>
+              )}
             </div>
 
             {/* Status Kelancaran KBM */}

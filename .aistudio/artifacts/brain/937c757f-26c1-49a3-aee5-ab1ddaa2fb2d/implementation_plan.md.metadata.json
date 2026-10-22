@@ -1,6 +1,6 @@
 {
-  "summary":  "Rancangan penghapusan tombol Cetak Lembar Presensi dan penambahan informasi 'Diisi oleh Piket', Sumber Data, dan Nama Penginput pada DetailModal.",
-  "updatedAt":  "2026-10-22T08:00:01.784704426Z",
+  "summary":  "Rancangan penambahan tampilan Hari & Tanggal (contoh: Kamis, 22 Okt 2026) tepat di samping kanan waktu WIB pada kotak Realtime di sub-header status bar (TopNav.tsx).",
+  "updatedAt":  "2026-10-22T09:25:26.614153393Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

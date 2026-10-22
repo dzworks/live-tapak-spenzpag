@@ -714,6 +714,8 @@ export default function App() {
         timeRangeText={activePeriodScheduleInfo ? `${activePeriodScheduleInfo.startTime} - ${activePeriodScheduleInfo.endTime}` : '07:00 - 14:00'}
         kbmStatusText={isWeekend ? 'Libur Akhir Pekan' : stats.emptyCount === 0 ? 'KBM 100% Lancar' : 'Proses KBM Hari Ini'}
         kbmStatusColor={isWeekend ? 'text-amber-300 bg-amber-950/60 border-amber-700/60' : 'text-emerald-300 bg-emerald-950/60 border-emerald-700/60'}
+        selectedDate={selectedDate}
+        dayNameIndo={dayNameIndo}
       />
 
 
@@ -738,16 +740,7 @@ export default function App() {
                 </select>
               </div>
 
-              {/* Day Type Badge */}
-              <span className={`text-[11px] px-2 py-0.5 rounded-md font-semibold border ${
-                isWeekend 
-                  ? 'bg-amber-50 text-amber-800 border-amber-200' 
-                  : dayType === 'friday'
-                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                  : 'bg-indigo-50 text-indigo-800 border-indigo-200'
-              }`}>
-                {dayNameIndo} · {dayInfo.label}
-              </span>
+
 
               {/* Sync Notification Banner */}
               {syncMessage && (

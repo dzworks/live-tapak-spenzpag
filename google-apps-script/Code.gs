@@ -269,7 +269,7 @@ function handleSaveAttendanceLog(payload) {
     });
   }
 
-  var sheet = ss.getSheetByName('AttendanceLogs') || ss.getSheetByName('attendancelogs');
+  var sheet = ss.getSheetByName('AttendanceLogs') || ss.getSheetByName('attendancelogs') || ss.getSheetByName('Attendance Logs');
 
   // Jika sheet AttendanceLogs / attendancelogs tidak ditemukan, kembalikan error
   if (!sheet) {
@@ -280,7 +280,7 @@ function handleSaveAttendanceLog(payload) {
     });
   }
 
-  var logData = payload.logData || payload;
+  var logData = payload.log || payload.logData || payload;
   var idKiriman = String(logData['ID Kiriman'] || logData.idKiriman || '').trim();
 
   if (!idKiriman) {
@@ -291,55 +291,124 @@ function handleSaveAttendanceLog(payload) {
     });
   }
 
-  // Baris nilai 17 kolom standar AttendanceLogs
-  var rowValues = [
-    logData['Tanggal'] || logData.tanggal || '',
-    logData['Waktu Absen (WIB)'] || logData.waktuAbsen || '',
-    logData['Kelas'] || logData.kelas || '',
-    logData['Mapel Ke'] || logData.mapelKe || 1,
-    logData['Kode Guru'] || logData.kodeGuru || '',
-    logData['Mata Pelajaran'] || logData.mataPelajaran || '',
-    logData['Status Kehadiran'] || logData.statusKehadiran || 'Hadir',
-    logData['Jam Ke'] || logData.jamKe || '',
-    logData['Jam Mulai'] || logData.jamMulai || '',
-    logData['Jam Selesai'] || logData.jamSelesai || '',
-    logData['Ruang Belajar'] || logData.ruangBelajar || 'Ruang Kelas',
-    logData['Kegiatan Pembelajaran'] || logData.kegiatanPembelajaran || '-',
-    logData['Info Ketidakhadiran'] || logData.infoKetidakhadiran || '-',
-    logData['Pengganti (Y/N)'] || logData.pengganti || 'N',
-    logData['Sumber Data'] || logData['Sumber data'] || logData.sumberData || 'Agenda Kelas',
-    logData['Penginput Data'] || logData.penginputData || 'Petugas Piket',
-    idKiriman
-  ];
-
-  // Cari apakah ID Kiriman sudah ada di Kolom Q (Kolom 17)
+  // Baca header baris 1 untuk pemetaan dinamis
   var lastRow = sheet.getLastRow();
-  var targetRow = -1;
-  var actionDone = 'inserted';
+  var lastCol = sheet.getLastColumn();
+  if (lastCol < 1) lastCol = 17;
 
-  if (lastRow >= 2) {
-    var idRange = sheet.getRange(2, 17, lastRow - 1, 1).getValues();
+  var headers = [];
+  if (lastRow >= 1) {
+    headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h) { return String(h).trim(); });
+  }
+
+  // Cari posisi kolom ID Kiriman secara dinamis (Kolom P = 16 atau Kolom Q = 17)
+  var idColIdx = -1;
+  for (var h = 0; h < headers.length; h++) {
+    if (headers[h].toLowerCase() === 'id kiriman') {
+      idColIdx = h;
+      break;
+    }
+  }
+
+  // Helper mencocokkan key ke nama header sheet
+  function getValueForHeader(headerName) {
+    var norm = headerName.toLowerCase();
+    
+    if (norm === 'tanggal') return logData['Tanggal'] || logData.tanggal || '';
+    if (norm.includes('waktu absen')) return logData['Waktu Absen (WIB)'] || logData['Waktu Absen'] || logData.waktuAbsen || '';
+    if (norm === 'kelas') return logData['Kelas'] || logData.kelas || '';
+    if (norm.includes('mapel ke')) return logData['Mapel Ke'] || logData.mapelKe || 1;
+    if (norm.includes('kode guru')) return logData['Kode Guru'] || logData.kodeGuru || '';
+    if (norm.includes('mata pelajaran')) return logData['Mata Pelajaran'] || logData.mataPelajaran || '';
+    if (norm.includes('status kehadiran')) return logData['Status Kehadiran'] || logData.statusKehadiran || 'Hadir';
+    if (norm.includes('jam ke')) return logData['Jam Ke'] || logData.jamKe || '';
+    if (norm.includes('jam mulai')) return logData['Jam Mulai'] || logData.jamMulai || '';
+    if (norm.includes('jam selesai')) return logData['Jam Selesai'] || logData.jamSelesai || '';
+    if (norm.includes('ruang belajar')) return 'Ruang Kelas';
+    if (norm.includes('kegiatan pembelajaran')) return logData['Kegiatan Pembelajaran'] || logData.kegiatanPembelajaran || '-';
+    if (norm.includes('info ketidakhadiran')) return logData['Info Ketidakhadiran'] || logData.infoKetidakhadiran || '-';
+    if (norm.includes('pengganti')) return logData['Pengganti (Y/N)'] || logData.pengganti || 'N';
+    if (norm.includes('sumber data')) return logData['Sumber Data'] || logData['Sumber data'] || logData.sumberData || 'Agenda Kelas';
+    if (norm.includes('penginput data')) return logData['Penginput Data'] || logData.penginputData || 'Petugas Piket';
+    if (norm.includes('id kiriman')) return idKiriman;
+    
+    return logData[headerName] || logData[norm] || '';
+  }
+
+  var rowValues = [];
+  if (headers.length > 0) {
+    for (var col = 0; col < headers.length; col++) {
+      rowValues.push(getValueForHeader(headers[col]));
+    }
+  } else {
+    // Fallback 17 kolom standar jika sheet belum memiliki header
+    rowValues = [
+      logData['Tanggal'] || logData.tanggal || '',
+      logData['Waktu Absen (WIB)'] || logData.waktuAbsen || '',
+      logData['Kelas'] || logData.kelas || '',
+      logData['Mapel Ke'] || logData.mapelKe || 1,
+      logData['Kode Guru'] || logData.kodeGuru || '',
+      logData['Mata Pelajaran'] || logData.mataPelajaran || '',
+      logData['Status Kehadiran'] || logData.statusKehadiran || 'Hadir',
+      logData['Jam Ke'] || logData.jamKe || '',
+      logData['Jam Mulai'] || logData.jamMulai || '',
+      logData['Jam Selesai'] || logData.jamSelesai || '',
+      logData['Ruang Belajar'] || logData.ruangBelajar || 'Ruang Kelas',
+      logData['Kegiatan Pembelajaran'] || logData.kegiatanPembelajaran || '-',
+      logData['Info Ketidakhadiran'] || logData.infoKetidakhadiran || '-',
+      logData['Pengganti (Y/N)'] || logData.pengganti || 'N',
+      logData['Sumber Data'] || logData['Sumber data'] || logData.sumberData || 'Agenda Kelas',
+      logData['Penginput Data'] || logData.penginputData || 'Petugas Piket',
+      idKiriman
+    ];
+  }
+
+  // Cari ID Kiriman pada kolom terdeteksi (misal Kolom P = 16 atau Kolom Q = 17)
+  var targetRow = -1;
+  var checkCol = idColIdx >= 0 ? (idColIdx + 1) : 16; // Prioritaskan Kolom P (16) sesuai struktur
+
+  if (lastRow >= 2 && checkCol >= 1) {
+    var idRange = sheet.getRange(2, checkCol, lastRow - 1, 1).getValues();
     for (var i = 0; i < idRange.length; i++) {
       if (String(idRange[i][0]).trim() === idKiriman) {
         targetRow = i + 2; // offset header
-        actionDone = 'updated';
         break;
       }
     }
   }
 
+  // Fallback tambahan jika ID Kiriman berada di Kolom Q (17) atau P (16)
+  if (targetRow < 0 && lastRow >= 2) {
+    var checkColsAlt = [16, 17];
+    for (var cIdx = 0; cIdx < checkColsAlt.length; cIdx++) {
+      var altCol = checkColsAlt[cIdx];
+      if (altCol <= lastCol) {
+        var altRange = sheet.getRange(2, altCol, lastRow - 1, 1).getValues();
+        for (var j = 0; j < altRange.length; j++) {
+          if (String(altRange[j][0]).trim() === idKiriman) {
+            targetRow = j + 2;
+            break;
+          }
+        }
+      }
+      if (targetRow > 0) break;
+    }
+  }
+
+  var actionDone = 'inserted';
   if (targetRow > 0) {
     // Overwrite baris yang ada
-    sheet.getRange(targetRow, 1, 1, 17).setValues([rowValues]);
+    sheet.getRange(targetRow, 1, 1, rowValues.length).setValues([rowValues]);
+    actionDone = 'updated';
   } else {
-    // Tambah baris baru
+    // Tambahkan baris baru
     sheet.appendRow(rowValues);
   }
 
   return createJsonResponse({
     status: 'success',
     success: true,
-    message: "Data presensi berhasil " + (actionDone === 'updated' ? 'diperbarui' : 'ditambahkan') + " pada sheet AttendanceLogs",
+    message: "Data presensi berhasil " + (actionDone === 'updated' ? 'diperbarui' : 'ditambahkan') + " pada sheet " + sheet.getName(),
     action: actionDone,
     idKiriman: idKiriman,
     timestamp: new Date().toISOString()
