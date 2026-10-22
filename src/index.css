@@ -6,6 +6,20 @@
   }
 }
 
+/* Custom keyframes for smooth countdown line (0% to 100%) */
+@keyframes toastProgressFill {
+  0% {
+    width: 0%;
+  }
+  100% {
+    width: 100%;
+  }
+}
+
+.animate-toast-progress {
+  animation: toastProgressFill 7000ms linear forwards;
+}
+
 /* Custom scrollbars for high-density matrix */
 ::-webkit-scrollbar {
   width: 6px;
@@ -21,3 +35,4 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(148, 163, 184, 0.5);
 }
+

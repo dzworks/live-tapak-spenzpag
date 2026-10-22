@@ -30,12 +30,14 @@ import {
   Calendar,
   UserCheck,
   UserX,
-  Sparkles
+  Sparkles,
+  ClipboardCheck
 } from 'lucide-react';
 import { maskAppsScriptUrl } from '../utils/maskUrl';
-import { MasterLoginAccount, AdminSession, ScheduleItem, AttendanceLogItem, MasterGuru, ClassMaster } from '../types';
+import { MasterLoginAccount, AdminSession, ScheduleItem, AttendanceLogItem, MasterGuru, ClassMaster, MasterMapel } from '../types';
 import { DEFAULT_MASTER_LOGIN } from '../data/initialData';
-import { isSameDate, getDayNameIndonesian, isSampleEntity } from '../utils/appsScriptCode';
+import { isSameDate, getDayNameIndonesian, isSampleEntity, generateGoogleAppsScriptCode } from '../utils/appsScriptCode';
+import { AdminPiketAgendaWorkspace } from './AdminPiketAgendaWorkspace';
 
 interface AdminUrlModalProps {
   isOpen: boolean;
@@ -50,8 +52,11 @@ interface AdminUrlModalProps {
   attendanceLogs?: AttendanceLogItem[];
   masterGuru?: MasterGuru[];
   classes?: ClassMaster[];
+  masterMapel?: MasterMapel[];
   selectedDate?: string;
   wibTimeStr?: string;
+  onSavePiketAttendanceLog?: (log: AttendanceLogItem) => Promise<{ success: boolean; message: string }>;
+  onOpenPiketTab?: () => void;
 }
 
 export const AdminUrlModal: React.FC<AdminUrlModalProps> = ({
@@ -67,8 +72,11 @@ export const AdminUrlModal: React.FC<AdminUrlModalProps> = ({
   attendanceLogs = [],
   masterGuru = [],
   classes = [],
+  masterMapel = [],
   selectedDate = '09-Okt-2026',
   wibTimeStr = '10:14:00 WIB',
+  onSavePiketAttendanceLog,
+  onOpenPiketTab,
 }) => {
   // Status login: Terautentikasi jika sudah ada adminSession aktif
   const isAuthenticated = Boolean(adminSession);
@@ -87,12 +95,20 @@ export const AdminUrlModal: React.FC<AdminUrlModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccessMessage, setSaveSuccessMessage] = useState('');
 
-  // Tab Sub-Menu Admin: 'profile' (Profil) | 'config' (URL Backend) | 'accounts' (Daftar Username) | 'report' (Generate Laporan)
-  const [activeAdminTab, setActiveAdminTab] = useState<'profile' | 'config' | 'accounts' | 'report'>('profile');
+  // Tab Sub-Menu Admin: 'profile' (Profil) | 'piket' (Input Agenda Piket) | 'config' (URL Backend) | 'accounts' (Daftar Username) | 'report' (Generate Laporan)
+  const [activeAdminTab, setActiveAdminTab] = useState<'profile' | 'piket' | 'config' | 'accounts' | 'report'>('profile');
 
-  // State untuk Generate Laporan
+  // State untuk Generate Laporan & Salin Skrip Backend
   const [reportDate, setReportDate] = useState<string>(selectedDate);
   const [copiedWaText, setCopiedWaText] = useState(false);
+  const [copiedScript, setCopiedScript] = useState(false);
+
+  const handleCopyScript = () => {
+    const code = generateGoogleAppsScriptCode();
+    navigator.clipboard.writeText(code);
+    setCopiedScript(true);
+    setTimeout(() => setCopiedScript(false), 2500);
+  };
 
   // Ekspor konfigurasi permanen untuk GitHub / Vercel (Multi-Device)
   const [copiedConfig, setCopiedConfig] = useState(false);
@@ -242,7 +258,7 @@ export const AdminUrlModal: React.FC<AdminUrlModalProps> = ({
         const counts = data.counts || {};
         setTestResult({
           success: true,
-          message: `Koneksi Berhasil! Terhubung ke '${data.spreadsheetName || 'Spreadsheet'}' (${counts.masterGuru || 0} Guru, ${counts.attendanceLogs || 0} Log Absen, ${counts.masterLogin || 0} Akun Login).`
+          message: `Koneksi Berhasil! Terhubung ke '${data.spreadsheetName || 'Spreadsheet'}' (${counts.masterGuru || 0} Guru, ${counts.attendanceLogs || 0} Log Absen, ${counts.hariLibur || 0} Hari Libur, ${counts.masterLogin || 0} Akun Login).`
         });
       } else {
         setTestResult({
@@ -389,7 +405,7 @@ _Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
         </div>
       </div>
 
-      <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[92vh] flex flex-col">
+      <div className={`relative w-full ${activeAdminTab === 'piket' ? 'max-w-5xl' : 'max-w-2xl'} bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[92vh] flex flex-col transition-all duration-200`}>
         
         {/* Header Modal */}
         <div className="px-5 sm:px-6 py-4 bg-slate-950 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
@@ -518,8 +534,8 @@ _Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
             /* TAMPILAN 2: ADMIN PANEL SETELAH LOGIN (4 SUB-MENU SIMPEL) */
             <div className="space-y-4">
               
-              {/* Header Tab Sub-Navigasi Horizontal 3 Menu */}
-              <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600">
+              {/* Header Tab Sub-Navigasi Horizontal 4 Menu */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600">
                 <button
                   type="button"
                   onClick={() => setActiveAdminTab('profile')}
@@ -531,6 +547,25 @@ _Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
                 >
                   <User className="w-3.5 h-3.5 text-indigo-600" />
                   <span>Profil</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onOpenPiketTab) {
+                      onOpenPiketTab();
+                    } else {
+                      setActiveAdminTab('piket');
+                    }
+                  }}
+                  className={`py-2 px-2 rounded-lg transition cursor-pointer text-center flex items-center justify-center gap-1.5 ${
+                    activeAdminTab === 'piket'
+                      ? 'bg-indigo-600 text-white shadow-xs font-bold ring-1 ring-indigo-500'
+                      : 'hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <ClipboardCheck className={`w-3.5 h-3.5 ${activeAdminTab === 'piket' ? 'text-white' : 'text-indigo-600'}`} />
+                  <span>Agenda Piket</span>
                 </button>
 
                 <button
@@ -559,6 +594,20 @@ _Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
                   <span>Daftar Akun</span>
                 </button>
               </div>
+
+              {/* SUB-MENU KHUSUS: INPUT AGENDA PIKET KBM SISWA */}
+              {activeAdminTab === 'piket' && (
+                <AdminPiketAgendaWorkspace
+                  schedules={schedules}
+                  attendanceLogs={attendanceLogs}
+                  classes={classes}
+                  masterGuru={masterGuru}
+                  masterMapel={masterMapel}
+                  selectedDate={selectedDate}
+                  adminSession={adminSession}
+                  onSaveLog={onSavePiketAttendanceLog || (async () => ({ success: true, message: 'Disimpan secara lokal.' }))}
+                />
+              )}
 
               {/* SUB-MENU 1: PROFIL ADMIN */}
               {activeAdminTab === 'profile' && (
@@ -606,6 +655,29 @@ _Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
                       </div>
                     </div>
                   </div>
+
+                  {/* Pintasan Lembar Kerja Agenda Piket Siswa */}
+                  {onOpenPiketTab && (
+                    <div className="p-4 bg-indigo-50/80 rounded-xl border border-indigo-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-1.5 font-bold text-xs text-indigo-950">
+                          <ClipboardCheck className="w-4 h-4 text-indigo-600" />
+                          <span>Lembar Kerja Agenda Piket KBM Siswa</span>
+                        </div>
+                        <span className="text-[11px] text-indigo-800/80 block mt-0.5">
+                          Buka tampilan penuh di samping tab Laporan KBM untuk menginput agenda manual kelas dengan nyaman dan leluasa.
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={onOpenPiketTab}
+                        className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer shrink-0"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>Buka Halaman Penuh</span>
+                      </button>
+                    </div>
+                  )}
 
                   {/* Tombol Logout Sesi Admin */}
                   <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
@@ -716,6 +788,36 @@ _Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
                         <span>{saveSuccessMessage}</span>
                       </div>
                     )}
+                  </div>
+
+                  {/* Salin Kode Apps Script Code.gs Terbaru */}
+                  <div className="p-3.5 bg-slate-900 text-slate-100 rounded-xl border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-300">
+                        <FileCode2 className="w-4 h-4 text-indigo-400" />
+                        <span>Kode Google Apps Script (Code.gs):</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleCopyScript}
+                        className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition flex items-center gap-1 cursor-pointer"
+                      >
+                        {copiedScript ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-300" />
+                            <span>Tersalin!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Salin Skrip Code.gs</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-slate-300 leading-normal">
+                      Salin kode di atas lalu tempelkan ke <strong>Apps Script Editor</strong> pada Google Spreadsheet Anda untuk mendukung penyimpanan data presensi ke sheet <code className="font-mono text-amber-300 bg-slate-800 px-1 py-0.5 rounded">attendancelogs</code>.
+                    </p>
                   </div>
                 </div>
               )}

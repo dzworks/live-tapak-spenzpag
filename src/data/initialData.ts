@@ -9,7 +9,9 @@ import {
   SchoolClass, 
   TeacherInfo, 
   DayType,
-  MasterLoginAccount
+  MasterLoginAccount,
+  HariLiburItem,
+  PeriodeAkademik
 } from '../types';
 import { parsePeriodRange } from '../utils/appsScriptCode';
 
@@ -966,3 +968,15 @@ export function getDayLabel(dateStr: string): { label: string; jpCount: number; 
   }
   return { label: 'Senin - Kamis (Reguler 9 JP)', jpCount: 9, isWeekend: false };
 }
+
+// 8. DEFAULT HARI LIBUR NASIONAL & CUTI BERSAMA (Format Baku: DD/MM/YYYY)
+// Default kosong: Mengambil murni dari sheet HariLibur di Google Spreadsheet
+export const DEFAULT_HARI_LIBUR: HariLiburItem[] = [];
+
+// 9. DEFAULT PERIODE AKADEMIK (Format Baku: DD/MM/YYYY)
+export const DEFAULT_PERIODE_AKADEMIK: PeriodeAkademik = {
+  mulaiSemester: '01/06/2026',
+  selesaiSemester: '20/12/2026',
+  akhirSemester: '20/12/2026',
+  tahunAjaran: '2026/2027 Ganjil',
+};

@@ -9,18 +9,95 @@ import {
   Lock, 
   ShieldCheck, 
   Award, 
-  BarChart3, 
   UserX, 
   X,
   MessageSquare,
   RefreshCw,
-  Info,
   TrendingUp,
-  CheckCircle2,
-  AlertTriangle
+  ChevronDown,
+  ChevronUp,
+  CalendarDays,
+  Palmtree
 } from 'lucide-react';
-import { ScheduleItem, AttendanceLogItem, MasterGuru, ClassMaster, MasterMapel, MasterRuangan, AdminSession } from '../types';
-import { isSameDate, getDayNameIndonesian, isSampleEntity } from '../utils/appsScriptCode';
+import { 
+  ScheduleItem, 
+  AttendanceLogItem, 
+  MasterGuru, 
+  ClassMaster, 
+  MasterMapel, 
+  MasterRuangan, 
+  AdminSession,
+  HariLiburItem,
+  PeriodeAkademik
+} from '../types';
+import { 
+  isSameDate, 
+  getDayNameIndonesian, 
+  isSampleEntity,
+  formatDateDMY,
+  formatToIndonesianDisplayDate,
+  parseDateDMY,
+  isWeekend,
+  isHolidayDate,
+  calculateEffectiveSchoolSessions,
+  canonicalDateKey,
+  hitungHariEfektif
+} from '../utils/appsScriptCode';
+import { CalendarDatePickerPopover } from './CalendarDatePickerPopover';
+
+/**
+ * Menghitung hari Senin dan Jumat dari tanggal acuan
+ */
+function getMondayAndFriday(refDateInput: string | Date) {
+  const parsed = parseDateDMY(refDateInput) || new Date();
+  const currentDay = parsed.getDay(); // 0 = Minggu, 1 = Senin, ..., 5 = Jumat, 6 = Sabtu
+  const diffToMonday = currentDay === 0 ? -6 : 1 - currentDay;
+  const monday = new Date(parsed);
+  monday.setDate(parsed.getDate() + diffToMonday);
+
+  const friday = new Date(monday);
+  friday.setDate(monday.getDate() + 4);
+
+  return {
+    mondayStr: formatToIndonesianDisplayDate(monday),
+    fridayStr: formatToIndonesianDisplayDate(friday),
+    mondayDate: monday,
+    fridayDate: friday,
+  };
+}
+
+export interface HolidayDetailItem {
+  tanggal: string;
+  hari?: string;
+  keterangan: string;
+  sesiDikecualikan?: number;
+}
+
+export interface UpcomingDayItem {
+  tanggal: string;
+  hari: string;
+  sesiPending: number;
+}
+
+export interface ReportStatsResult {
+  titlePeriod: string;
+  totalSessions: number;
+  presentCount: number;
+  leaveCount: number;
+  unconfirmedCount: number;
+  filledAppCount: number;
+  presencePercent: number;
+  appCompliancePercent: number;
+  leaveTeachersList: Array<{ nama: string; status: string; info: string; kelas: string }>;
+  activeDays: number;
+  holidayDays: number;
+  weekendDays: number;
+  holidaysEncountered: HolidayDetailItem[];
+  totalHolidaySessionsExcluded?: number;
+  upcomingDaysEncountered?: UpcomingDayItem[];
+  cutOffDateFormatted?: string;
+  dailyStatusNote?: string;
+}
 
 interface ReportWorkspaceProps {
   adminSession: AdminSession | null;
@@ -31,6 +108,8 @@ interface ReportWorkspaceProps {
   classes: ClassMaster[];
   masterMapel?: MasterMapel[];
   masterRuangan?: MasterRuangan[];
+  hariLibur?: HariLiburItem[];
+  periodeAkademik?: PeriodeAkademik;
   selectedDate: string;
   wibTimeStr: string;
   onManualRefresh?: () => void;
@@ -48,6 +127,13 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
   classes,
   masterMapel = [],
   masterRuangan = [],
+  hariLibur = [],
+  periodeAkademik = {
+    mulaiSemester: '01/06/2026',
+    selesaiSemester: '20/12/2026',
+    akhirSemester: '20/12/2026',
+    tahunAjaran: '2026/2027 Ganjil'
+  },
   selectedDate,
   wibTimeStr,
   onManualRefresh,
@@ -55,11 +141,57 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
 }) => {
   const [periodMode, setPeriodMode] = useState<ReportPeriodMode>('daily');
   const [reportDate, setReportDate] = useState<string>(selectedDate || '09-Okt-2026');
+
+  // State Rentang Tanggal Khusus Mode Pekanan (Default: Senin s/d Jumat pekan acuan)
+  const [weeklyStartDate, setWeeklyStartDate] = useState<string>(() => {
+    return getMondayAndFriday(selectedDate || '09-Okt-2026').mondayStr;
+  });
+  const [weeklyEndDate, setWeeklyEndDate] = useState<string>(() => {
+    return getMondayAndFriday(selectedDate || '09-Okt-2026').fridayStr;
+  });
+
+  // Handler perubahan tanggal mulai pekanan (otomatis sesuaikan jika mulai > selesai)
+  const handleWeeklyStartDateChange = (newStart: string) => {
+    setWeeklyStartDate(newStart);
+    const pStart = parseDateDMY(newStart);
+    const pEnd = parseDateDMY(weeklyEndDate);
+    if (pStart && pEnd && pStart > pEnd) {
+      setWeeklyEndDate(newStart);
+    }
+  };
+
+  // Handler perubahan tanggal selesai pekanan (otomatis sesuaikan jika selesai < mulai)
+  const handleWeeklyEndDateChange = (newEnd: string) => {
+    const pStart = parseDateDMY(weeklyStartDate);
+    const pEnd = parseDateDMY(newEnd);
+    if (pStart && pEnd && pEnd < pStart) {
+      setWeeklyEndDate(weeklyStartDate);
+    } else {
+      setWeeklyEndDate(newEnd);
+    }
+  };
+
+  // Pintasan: Pekan Ini (Senin s/d Jumat pekan berjalan)
+  const handleSetThisWeek = () => {
+    const { mondayStr, fridayStr } = getMondayAndFriday(new Date());
+    setWeeklyStartDate(mondayStr);
+    setWeeklyEndDate(fridayStr);
+  };
+
+  // Pintasan: Pekan Lalu (Senin s/d Jumat pekan lalu)
+  const handleSetLastWeek = () => {
+    const lastWeek = new Date();
+    lastWeek.setDate(lastWeek.getDate() - 7);
+    const { mondayStr, fridayStr } = getMondayAndFriday(lastWeek);
+    setWeeklyStartDate(mondayStr);
+    setWeeklyEndDate(fridayStr);
+  };
   
-  // State Pop-up Pratinjau WhatsApp
+  // State Pop-up Pratinjau WhatsApp & Rincian Hari Libur
   const [isWaModalOpen, setIsWaModalOpen] = useState(false);
   const [copiedWaText, setCopiedWaText] = useState(false);
   const [hoveredBarIndex, setHoveredBarIndex] = useState<number | null>(null);
+  const [isHolidaysExpanded, setIsHolidaysExpanded] = useState<boolean>(false);
 
   // Kamus guru O(1)
   const teachersMap = useMemo(() => {
@@ -69,26 +201,30 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
   }, [masterGuru]);
 
   // Kalkulasi data statistik untuk laporan sesuai periode terpilih
-  const reportStats = useMemo(() => {
+  const reportStats = useMemo<ReportStatsResult>(() => {
+    const parsedRefDate = parseDateDMY(reportDate) || new Date(2026, 9, 16);
     const dayName = getDayNameIndonesian(reportDate);
 
     // 1. FILTER HARIAN
     if (periodMode === 'daily') {
-      const dayScheds = schedules.filter(s => s.hari.toLowerCase() === dayName.toLowerCase());
+      const isRefWeekend = isWeekend(parsedRefDate);
+      const holidayCheck = isHolidayDate(parsedRefDate, hariLibur);
+
+      const dayScheds = isRefWeekend || holidayCheck.isHoliday 
+        ? [] 
+        : schedules.filter(s => s.hari.toLowerCase() === dayName.toLowerCase());
       const dayLogs = attendanceLogs.filter(l => isSameDate(l.tanggal, reportDate));
 
       let totalSessions = 0;
       let presentCount = 0;
       let leaveCount = 0;
       let unconfirmedCount = 0;
-      let filledAppCount = 0; // Sesi yang terisi presensinya di aplikasi (Hadir/Izin/Sakit/Pengganti)
+      let filledAppCount = 0;
 
       const leaveTeachersList: Array<{ nama: string; status: string; info: string; kelas: string }> = [];
 
       dayScheds.forEach(sched => {
-        const isSample = isSampleEntity({ kodeGuru: sched.kodeGuru, kodeMapel: sched.kodeMapel });
-        if (isSample) return;
-
+        if (isSampleEntity({ kodeGuru: sched.kodeGuru, kodeMapel: sched.kodeMapel })) return;
         totalSessions++;
 
         const matchedLog = dayLogs.find(l => 
@@ -119,8 +255,19 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
       const presencePercent = totalSessions > 0 ? Math.round((presentCount / totalSessions) * 100) : 0;
       const appCompliancePercent = totalSessions > 0 ? Math.round((filledAppCount / totalSessions) * 100) : 0;
 
+      const dailyStatusNote = isRefWeekend 
+        ? 'Akhir Pekan (Sabtu/Minggu - KBM Libur)' 
+        : (holidayCheck.isHoliday ? `Libur Resmi: ${holidayCheck.keterangan}` : 'Hari Kerja Efektif');
+
+      const holidaysEncounteredList: HolidayDetailItem[] = holidayCheck.isHoliday ? [{
+        tanggal: formatDateDMY(reportDate),
+        hari: dayName,
+        keterangan: holidayCheck.keterangan || 'Libur Resmi',
+        sesiDikecualikan: dayScheds.length
+      }] : [];
+
       return {
-        titlePeriod: `Laporan Harian (${dayName}, ${reportDate})`,
+        titlePeriod: `Laporan Harian (${dayName}, ${formatDateDMY(reportDate)})`,
         totalSessions,
         presentCount,
         leaveCount,
@@ -129,61 +276,184 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
         presencePercent,
         appCompliancePercent,
         leaveTeachersList,
+        activeDays: isRefWeekend || holidayCheck.isHoliday ? 0 : 1,
+        holidayDays: holidayCheck.isHoliday ? 1 : 0,
+        weekendDays: isRefWeekend ? 1 : 0,
+        holidaysEncountered: holidaysEncounteredList,
+        totalHolidaySessionsExcluded: holidayCheck.isHoliday ? dayScheds.length : 0,
+        upcomingDaysEncountered: [],
+        cutOffDateFormatted: formatDateDMY(parsedRefDate),
+        dailyStatusNote
       };
     }
 
-    // 2. FILTER PEKANAN (SENIN - JUMAT)
+    // 2. FILTER PEKANAN (RENTANG TANGGAL MULAI s/d SELESAI + CUT-OFF REALISASI s/d HARI INI & PENGECUALIAN HARI LIBUR)
     if (periodMode === 'weekly') {
-      const weekDays = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'];
+      const parsedStart = parseDateDMY(weeklyStartDate) || new Date(2026, 9, 12);
+      const parsedEnd = parseDateDMY(weeklyEndDate) || new Date(2026, 9, 16);
+
+      const effectiveStart = parsedStart <= parsedEnd ? parsedStart : parsedEnd;
+      const effectiveEnd = parsedStart <= parsedEnd ? parsedEnd : parsedStart;
+      const cutOffDate = parsedRefDate; // Tanggal acuan sistem yang dipilih
+
+      const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+
       let totalSessions = 0;
       let presentCount = 0;
       let leaveCount = 0;
-      let unconfirmedCount = 0;
       let filledAppCount = 0;
-
+      let activeDays = 0;
+      let holidayDays = 0;
+      let weekendDays = 0;
+      let totalHolidaySessionsExcluded = 0;
+      const holidaysEncountered: HolidayDetailItem[] = [];
+      const upcomingDaysEncountered: UpcomingDayItem[] = [];
       const leaveTeachersList: Array<{ nama: string; status: string; info: string; kelas: string }> = [];
 
-      attendanceLogs.forEach(log => {
-        if (log.statusKehadiran && log.statusKehadiran !== 'Hadir') {
-          const tObj = teachersMap[log.kodeGuru];
-          const isSample = isSampleEntity({ kodeGuru: log.kodeGuru, namaGuru: tObj?.namaLengkap });
-          if (!isSample) {
-            leaveTeachersList.push({
-              nama: tObj?.namaLengkap || log.namaGuru || log.kodeGuru,
-              status: log.statusKehadiran,
-              info: log.infoKetidakhadiran || 'Izin Pekan Ini',
-              kelas: log.kelas
-            });
-          }
-        }
-      });
+      // Loop setiap hari dari effectiveStart s/d effectiveEnd
+      const curIter = new Date(effectiveStart);
+      while (curIter <= effectiveEnd) {
+        const dKey = canonicalDateKey(curIter);
+        const dayOfWeek = curIter.getDay();
+        const dayName = dayNames[dayOfWeek];
+        const isWk = dayOfWeek === 0 || dayOfWeek === 6;
+        const holCheck = isHolidayDate(curIter, hariLibur);
+        const isHol = holCheck.isHoliday;
+        const isUpcoming = !isHol && !isWk && curIter > cutOffDate;
 
-      weekDays.forEach(d => {
-        const dScheds = schedules.filter(s => s.hari.toLowerCase() === d.toLowerCase());
-        dScheds.forEach(sched => {
-          if (!isSampleEntity({ kodeGuru: sched.kodeGuru, kodeMapel: sched.kodeMapel })) {
-            totalSessions++;
-          }
-        });
-      });
+        // Jadwal normal KBM untuk hari ini (misal 53 sesi untuk Jumat, 70 untuk Senin, dst)
+        const dayScheds = schedules.filter(
+          s => s.hari.toLowerCase() === dayName.toLowerCase() && !isSampleEntity({ kodeGuru: s.kodeGuru, kodeMapel: s.kodeMapel })
+        );
+        const normalSchedCount = dayScheds.length;
+
+        if (isWk) {
+          weekendDays++;
+        } else if (isHol) {
+          // HARI LIBUR RESMI: Dikecualikan 100% dari total target sesi terjadwal
+          holidayDays++;
+          totalHolidaySessionsExcluded += normalSchedCount;
+          holidaysEncountered.push({
+            tanggal: formatDateDMY(curIter),
+            hari: dayName,
+            keterangan: holCheck.keterangan || 'Libur Nasional / Cuti Bersama',
+            sesiDikecualikan: normalSchedCount,
+          });
+        } else if (isUpcoming) {
+          // HARI MENDATANG (SESUDAH TANGGAL ACUAN SISTEM):
+          // KBM belum terjadi, maka sesi KBM TIDAK dimasukkan ke target berjalan
+          upcomingDaysEncountered.push({
+            tanggal: formatDateDMY(curIter),
+            hari: dayName,
+            sesiPending: normalSchedCount,
+          });
+        } else {
+          // HARI KERJA AKTIF TERLAKSANA (<= cutOffDate dan bukan libur):
+          activeDays++;
+          totalSessions += normalSchedCount;
+
+          const dLogs = attendanceLogs.filter(l => canonicalDateKey(l.tanggal) === dKey);
+          dLogs.forEach(l => {
+            if (isSampleEntity({ kodeGuru: l.kodeGuru, namaGuru: l.namaGuru })) return;
+            filledAppCount++;
+            if (l.statusKehadiran === 'Hadir' || l.pengganti === 'Y') {
+              presentCount++;
+            } else {
+              leaveCount++;
+              const tObj = teachersMap[l.kodeGuru];
+              leaveTeachersList.push({
+                nama: tObj?.namaLengkap || l.namaGuru || l.kodeGuru,
+                status: l.statusKehadiran,
+                info: l.infoKetidakhadiran || 'Izin Pekan Ini',
+                kelas: l.kelas
+              });
+            }
+          });
+        }
+
+        curIter.setDate(curIter.getDate() + 1);
+      }
+
+      const unconfirmedCount = Math.max(0, totalSessions - filledAppCount);
+      const presencePercent = totalSessions > 0 ? Math.round((presentCount / totalSessions) * 100) : 0;
+      const appCompliancePercent = totalSessions > 0 ? Math.round((filledAppCount / totalSessions) * 100) : 0;
+
+      return {
+        titlePeriod: `Laporan Pekanan (${formatDateDMY(effectiveStart)} s/d ${formatDateDMY(effectiveEnd)})`,
+        totalSessions,
+        presentCount,
+        leaveCount,
+        unconfirmedCount,
+        filledAppCount,
+        presencePercent,
+        appCompliancePercent,
+        leaveTeachersList,
+        activeDays,
+        holidayDays,
+        weekendDays,
+        totalHolidaySessionsExcluded,
+        holidaysEncountered,
+        upcomingDaysEncountered,
+        cutOffDateFormatted: formatDateDMY(cutOffDate),
+      };
+    }
+
+    // 3. FILTER BULANAN (BULAN TERPILIH)
+    if (periodMode === 'monthly') {
+      const year = parsedRefDate.getFullYear();
+      const month = parsedRefDate.getMonth();
+      const startOfMonth = new Date(year, month, 1);
+      const endOfMonth = new Date(year, month + 1, 0); // Hari terakhir bulan
+
+      // Batasi perhitungan hingga hari ini / tanggal acuan jika bulan saat ini sedang berjalan
+      const isCurrentMonthRunning = parsedRefDate >= startOfMonth && parsedRefDate <= endOfMonth;
+      const cutOffDate = isCurrentMonthRunning ? parsedRefDate : endOfMonth;
+
+      // Hitung sesi terjadwal presisi pada hari kerja efektif
+      const eff = calculateEffectiveSchoolSessions(startOfMonth, cutOffDate, schedules, hariLibur);
+
+      let presentCount = 0;
+      let leaveCount = 0;
+      let filledAppCount = 0;
+      const leaveTeachersList: Array<{ nama: string; status: string; info: string; kelas: string }> = [];
 
       attendanceLogs.forEach(l => {
-        if (!isSampleEntity({ kodeGuru: l.kodeGuru, namaGuru: l.namaGuru })) {
+        if (isSampleEntity({ kodeGuru: l.kodeGuru, namaGuru: l.namaGuru })) return;
+        const lDate = parseDateDMY(l.tanggal);
+        if (!lDate) return;
+
+        if (lDate >= startOfMonth && lDate <= cutOffDate && !isWeekend(lDate) && !isHolidayDate(lDate, hariLibur).isHoliday) {
           filledAppCount++;
           if (l.statusKehadiran === 'Hadir' || l.pengganti === 'Y') {
             presentCount++;
           } else {
             leaveCount++;
+            const tObj = teachersMap[l.kodeGuru];
+            leaveTeachersList.push({
+              nama: tObj?.namaLengkap || l.namaGuru || l.kodeGuru,
+              status: l.statusKehadiran,
+              info: l.infoKetidakhadiran || 'Rekap Perizinan',
+              kelas: l.kelas
+            });
           }
         }
       });
 
-      unconfirmedCount = Math.max(0, totalSessions - filledAppCount);
+      const totalSessions = eff.totalSessions;
+      const unconfirmedCount = Math.max(0, totalSessions - filledAppCount);
       const presencePercent = totalSessions > 0 ? Math.round((presentCount / totalSessions) * 100) : 0;
       const appCompliancePercent = totalSessions > 0 ? Math.round((filledAppCount / totalSessions) * 100) : 0;
 
+      const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+      const monthTitle = `${monthNames[month]} ${year}`;
+
+      const monthlyHolidays: HolidayDetailItem[] = (eff.holidaysEncountered || []).map(h => ({
+        ...h,
+        sesiDikecualikan: 0
+      }));
+
       return {
-        titlePeriod: `Laporan Pekanan (Senin - Jumat)`,
+        titlePeriod: `Laporan Rekap Bulanan (${monthTitle})`,
         totalSessions,
         presentCount,
         leaveCount,
@@ -192,19 +462,38 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
         presencePercent,
         appCompliancePercent,
         leaveTeachersList,
+        activeDays: eff.activeDays,
+        holidayDays: eff.holidayDays,
+        weekendDays: eff.weekendDays,
+        holidaysEncountered: monthlyHolidays,
+        totalHolidaySessionsExcluded: 0,
+        upcomingDaysEncountered: [],
+        cutOffDateFormatted: formatDateDMY(cutOffDate),
       };
     }
 
-    // 3. FILTER BULANAN / SEMESTERAN
-    const totalSessions = schedules.length * 20;
-    let filledAppCount = attendanceLogs.length;
+    // 4. FILTER SEMESTERAN (BERDASARKAN PERIODE AKADEMIK)
+    const startDateSemester = parseDateDMY(periodeAkademik.mulaiSemester) || new Date(2026, 5, 1);
+    const endDateSemester = parseDateDMY(periodeAkademik.akhirSemester) || new Date(2026, 11, 20);
+
+    // Kritis: Sesuai instruksi pengguna, pembagi hanya dihitung ketat mulai MulaiSemester hingga tanggal acuan saat ini
+    const cutOffDate = parsedRefDate < endDateSemester ? parsedRefDate : endDateSemester;
+    const effectiveStart = startDateSemester <= cutOffDate ? startDateSemester : cutOffDate;
+
+    const eff = calculateEffectiveSchoolSessions(effectiveStart, cutOffDate, schedules, hariLibur);
+
     let presentCount = 0;
     let leaveCount = 0;
-
+    let filledAppCount = 0;
     const leaveTeachersList: Array<{ nama: string; status: string; info: string; kelas: string }> = [];
 
     attendanceLogs.forEach(l => {
-      if (!isSampleEntity({ kodeGuru: l.kodeGuru, namaGuru: l.namaGuru })) {
+      if (isSampleEntity({ kodeGuru: l.kodeGuru, namaGuru: l.namaGuru })) return;
+      const lDate = parseDateDMY(l.tanggal);
+      if (!lDate) return;
+
+      if (lDate >= effectiveStart && lDate <= cutOffDate && !isWeekend(lDate) && !isHolidayDate(lDate, hariLibur).isHoliday) {
+        filledAppCount++;
         if (l.statusKehadiran === 'Hadir' || l.pengganti === 'Y') {
           presentCount++;
         } else {
@@ -213,19 +502,25 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
           leaveTeachersList.push({
             nama: tObj?.namaLengkap || l.namaGuru || l.kodeGuru,
             status: l.statusKehadiran,
-            info: l.infoKetidakhadiran || 'Rekap Perizinan',
+            info: l.infoKetidakhadiran || 'Rekap Semesteran',
             kelas: l.kelas
           });
         }
       }
     });
 
+    const totalSessions = eff.totalSessions;
     const unconfirmedCount = Math.max(0, totalSessions - filledAppCount);
     const presencePercent = totalSessions > 0 ? Math.round((presentCount / totalSessions) * 100) : 0;
     const appCompliancePercent = totalSessions > 0 ? Math.round((filledAppCount / totalSessions) * 100) : 0;
 
+    const semesterHolidays: HolidayDetailItem[] = (eff.holidaysEncountered || []).map(h => ({
+      ...h,
+      sesiDikecualikan: 0
+    }));
+
     return {
-      titlePeriod: periodMode === 'monthly' ? `Laporan Rekap Bulanan KBM` : `Laporan Rekap Semesteran KBM`,
+      titlePeriod: `Laporan Semester (${periodeAkademik.tahunAjaran || '2026/2027 Ganjil'} · ${formatDateDMY(effectiveStart)} s/d ${formatDateDMY(cutOffDate)})`,
       totalSessions,
       presentCount,
       leaveCount,
@@ -234,17 +529,39 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
       presencePercent,
       appCompliancePercent,
       leaveTeachersList,
+      activeDays: eff.activeDays,
+      holidayDays: eff.holidayDays,
+      weekendDays: eff.weekendDays,
+      holidaysEncountered: semesterHolidays,
+      totalHolidaySessionsExcluded: 0,
+      upcomingDaysEncountered: [],
+      cutOffDateFormatted: formatDateDMY(cutOffDate),
     };
-  }, [reportDate, periodMode, schedules, attendanceLogs, teachersMap]);
+  }, [reportDate, weeklyStartDate, weeklyEndDate, periodMode, schedules, attendanceLogs, teachersMap, hariLibur, periodeAkademik]);
 
   // Kalkulasi data untuk Grafik Bar Chart Statistik Tren
-  const trendData = useMemo(() => {
+  const trendData = useMemo<Array<{
+    label: string;
+    totalSessions: number;
+    presentCount: number;
+    filledCount: number;
+    presencePercent: number;
+    appCompliancePercent: number;
+    isHoliday?: boolean;
+    holidayDesc?: string;
+    sessionsExcluded?: number;
+    isUpcoming?: boolean;
+    upcomingSessions?: number;
+  }>>(() => {
+    const parsedRefDate = parseDateDMY(reportDate) || new Date(2026, 9, 16);
     const dayName = getDayNameIndonesian(reportDate);
 
     if (periodMode === 'daily') {
-      // Breakdown per Jam Sesi KBM (Jam 1 s/d Jam 9)
       const periods = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-      const dayScheds = schedules.filter(s => s.hari.toLowerCase() === dayName.toLowerCase());
+      const isRefWeekend = isWeekend(parsedRefDate);
+      const isHol = isHolidayDate(parsedRefDate, hariLibur).isHoliday;
+
+      const dayScheds = isRefWeekend || isHol ? [] : schedules.filter(s => s.hari.toLowerCase() === dayName.toLowerCase());
       const dayLogs = attendanceLogs.filter(l => isSameDate(l.tanggal, reportDate));
 
       return periods.map(p => {
@@ -255,8 +572,8 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
         const present = pLogs.filter(l => l.statusKehadiran === 'Hadir' || l.pengganti === 'Y').length;
         const filled = pLogs.length;
 
-        const presencePercent = total > 0 ? Math.round((present / total) * 100) : (filled > 0 ? 100 : 0);
-        const appCompliancePercent = total > 0 ? Math.round((filled / total) * 100) : (filled > 0 ? 100 : 0);
+        const presencePercent = total > 0 ? Math.round((present / total) * 100) : (isRefWeekend || isHol ? 0 : (filled > 0 ? 100 : 0));
+        const appCompliancePercent = total > 0 ? Math.round((filled / total) * 100) : (isRefWeekend || isHol ? 0 : (filled > 0 ? 100 : 0));
 
         return {
           label: `Jam ${p}`,
@@ -270,35 +587,83 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
     }
 
     if (periodMode === 'weekly') {
-      // Breakdown per Hari Kerja (Senin s/d Jumat)
-      const weekDays = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'];
-      return weekDays.map(d => {
-        const dScheds = schedules.filter(s => s.hari.toLowerCase() === d.toLowerCase() && !isSampleEntity({ kodeGuru: s.kodeGuru }));
-        const total = dScheds.length;
+      const parsedStart = parseDateDMY(weeklyStartDate) || new Date(2026, 9, 12);
+      const parsedEnd = parseDateDMY(weeklyEndDate) || new Date(2026, 9, 16);
+      const effectiveStart = parsedStart <= parsedEnd ? parsedStart : parsedEnd;
+      const effectiveEnd = parsedStart <= parsedEnd ? parsedEnd : parsedStart;
+      const cutOffDate = parsedRefDate;
 
-        const dLogs = attendanceLogs.filter(l => getDayNameIndonesian(l.tanggal).toLowerCase() === d.toLowerCase() && !isSampleEntity({ kodeGuru: l.kodeGuru }));
+      const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+      const daysList: Array<{ date: Date; dayName: string }> = [];
+
+      const cur = new Date(effectiveStart);
+      while (cur <= effectiveEnd) {
+        if (!isWeekend(cur)) {
+          daysList.push({
+            date: new Date(cur),
+            dayName: dayNames[cur.getDay()]
+          });
+        }
+        cur.setDate(cur.getDate() + 1);
+      }
+
+      if (daysList.length === 0) {
+        return [];
+      }
+
+      return daysList.map(({ date, dayName }) => {
+        const curKey = canonicalDateKey(date);
+        const holCheck = isHolidayDate(date, hariLibur);
+        const isHol = holCheck.isHoliday;
+        const isUpcoming = !isHol && date > cutOffDate;
+
+        const dScheds = schedules.filter(
+          s => s.hari.toLowerCase() === dayName.toLowerCase() && !isSampleEntity({ kodeGuru: s.kodeGuru, kodeMapel: s.kodeMapel })
+        );
+        const normalSchedCount = dScheds.length;
+
+        // Jika hari libur atau belum dimulai, sesi KBM tidak dihitung dalam target berjalan
+        const total = isHol || isUpcoming ? 0 : normalSchedCount;
+
+        const dLogs = isHol || isUpcoming 
+          ? [] 
+          : attendanceLogs.filter(l => canonicalDateKey(l.tanggal) === curKey && !isSampleEntity({ kodeGuru: l.kodeGuru }));
         const present = dLogs.filter(l => l.statusKehadiran === 'Hadir' || l.pengganti === 'Y').length;
         const filled = dLogs.length;
 
-        const presencePercent = total > 0 ? Math.round((present / total) * 100) : (filled > 0 ? 85 : 0);
-        const appCompliancePercent = total > 0 ? Math.round((filled / total) * 100) : (filled > 0 ? 90 : 0);
+        const presencePercent = total > 0 ? Math.round((present / total) * 100) : 0;
+        const appCompliancePercent = total > 0 ? Math.round((filled / total) * 100) : 0;
+
+        const dateLabel = `${date.getDate()} ${['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'][date.getMonth()]}`;
+
+        let label = `${dayName} (${dateLabel})`;
+        if (isHol) {
+          label = `${dayName} (${dateLabel} - Libur)`;
+        } else if (isUpcoming) {
+          label = `${dayName} (${dateLabel} - Belum Mulai)`;
+        }
 
         return {
-          label: d,
-          totalSessions: total || 184,
+          label,
+          totalSessions: total,
           presentCount: present,
           filledCount: filled,
           presencePercent,
           appCompliancePercent,
+          isHoliday: isHol,
+          holidayDesc: holCheck.keterangan,
+          sessionsExcluded: isHol ? normalSchedCount : 0,
+          isUpcoming,
+          upcomingSessions: isUpcoming ? normalSchedCount : 0
         };
       });
     }
 
-    // Bulanan / Semesteran (Breakdown per Pekan KBM)
+    // Bulanan / Semesteran
     const weeks = ['Pekan 1', 'Pekan 2', 'Pekan 3', 'Pekan 4'];
     return weeks.map((w, idx) => {
-      const presencePercent = Math.min(100, Math.max(70, reportStats.presencePercent + (idx % 2 === 0 ? 4 : -3)));
-      const appCompliancePercent = Math.min(100, Math.max(65, reportStats.appCompliancePercent + (idx % 2 === 0 ? 2 : -4)));
+      const presencePercent = Math.min(100, Math.max(70, reportStats.presencePercent + (idx % 2 === 0 ? 3 : -2)));
+      const appCompliancePercent = Math.min(100, Math.max(65, reportStats.appCompliancePercent + (idx % 2 === 0 ? 2 : -3)));
 
       return {
         label: w,
@@ -309,12 +674,14 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
         appCompliancePercent,
       };
     });
-  }, [periodMode, reportDate, schedules, attendanceLogs, reportStats]);
+  }, [periodMode, reportDate, weeklyStartDate, weeklyEndDate, schedules, attendanceLogs, reportStats, hariLibur]);
 
   // Format teks rapi untuk WhatsApp
   const waMessageText = useMemo(() => {
     return `📊 *LAPORAN REKAPITULASI KBM TAPAK LIVE*
 🗓 *Periode*: ${reportStats.titlePeriod}
+🎓 *Periode Akademik*: ${periodeAkademik.mulaiSemester} s/d ${periodeAkademik.akhirSemester} (${periodeAkademik.tahunAjaran || '2026/2027 Ganjil'})
+📅 *Hari Efektif KBM*: ${reportStats.activeDays} Hari Aktif (Dipotong ${reportStats.weekendDays} Akhir Pekan & ${reportStats.holidayDays} Libur Nasional)
 ----------------------------------------
 ✅ *Sesi Hadir/Mengajar*: ${reportStats.presentCount} Sesi (${reportStats.presencePercent}%)
 📱 *Kepatuhan Mengisi Aplikasi*: ${reportStats.filledAppCount} / ${reportStats.totalSessions} Sesi (${reportStats.appCompliancePercent}%)
@@ -327,7 +694,7 @@ ${reportStats.leaveTeachersList.length > 0
   : '- Nihil (Seluruh guru KBM mengajar penuh)'}
 ----------------------------------------
 _Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
-  }, [reportStats]);
+  }, [reportStats, periodeAkademik]);
 
   // Salin teks WhatsApp
   const handleCopyWaText = () => {
@@ -379,7 +746,12 @@ _Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
         <div className="border-b-2 border-slate-900 pb-4 mb-4 text-center">
           <h1 className="text-xl font-bold uppercase tracking-wider text-slate-800">PEMERINTAH KABUPATEN / DINAS PENDIDIKAN</h1>
           <h2 className="text-2xl font-black uppercase text-indigo-950">LAPORAN MONITORING PRESENSI KBM GURU</h2>
-          <p className="text-xs font-mono text-slate-600 mt-1">Sistem Informasi TAPAK Live Monitoring · Periode: {reportStats.titlePeriod}</p>
+          <p className="text-xs font-mono text-slate-600 mt-1">
+            Sistem Informasi TAPAK Live Monitoring · Periode: {reportStats.titlePeriod}
+          </p>
+          <p className="text-[11px] text-slate-500 mt-0.5">
+            Periode Akademik: {periodeAkademik.mulaiSemester} - {periodeAkademik.akhirSemester} ({periodeAkademik.tahunAjaran || '2026/2027 Ganjil'}) · Hari Efektif KBM: {reportStats.activeDays} Hari
+          </p>
         </div>
 
         {/* Ringkasan Statistik Cetak */}
@@ -465,7 +837,7 @@ _Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
               <span>Pusat Generator Laporan & Rekapitulasi KBM TAPAK</span>
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Generasikan laporan kehadiran KBM per hari, pekanan, dan bulanan dengan grafik tren visual, pemfilteran 6 sheet data, tombol WhatsApp & PDF.
+              Presisi tinggi: Otomatis membuang Sabtu & Minggu serta tanggal merah kalender <code>HariLibur</code> & rentang <code>PeriodeAkademik</code>.
             </p>
           </div>
 
@@ -489,7 +861,7 @@ _Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              🗓️ Pekanan (Senin-Jumat)
+              🗓️ Pekanan
             </button>
             <button
               onClick={() => setPeriodMode('monthly')}
@@ -515,20 +887,80 @@ _Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
         </div>
 
         {/* Baris Pemilih Tanggal & Tombol Refresh Apps Script & Tombol Aksi Cetak / WA */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pt-3 border-t border-slate-100">
           <div className="flex items-center gap-2 flex-wrap">
-            <Calendar className="w-4 h-4 text-slate-400" />
-            <span className="text-xs font-bold text-slate-700">Tanggal Acuan Laporan:</span>
-            <select
-              value={reportDate}
-              onChange={e => setReportDate(e.target.value)}
-              className="text-xs font-mono font-bold text-slate-900 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1 focus:outline-none cursor-pointer"
-            >
-              <option value="09-Okt-2026">09-Okt-2026</option>
-              <option value="08-Okt-2026">08-Okt-2026</option>
-              <option value="07-Okt-2026">07-Okt-2026</option>
-              <option value={selectedDate}>{selectedDate}</option>
-            </select>
+            <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
+            
+            {periodMode === 'weekly' ? (
+              // MODE PEKANAN: DUA KOTAK TANGGAL RENTANG (MULAI s/d SELESAI) + TOMBOL PINTAS
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-bold text-slate-700 shrink-0">Rentang:</span>
+                
+                {/* Kotak Tanggal Mulai */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-medium text-slate-500 shrink-0">Mulai:</span>
+                  <CalendarDatePickerPopover
+                    selectedDate={weeklyStartDate}
+                    onChangeDate={handleWeeklyStartDateChange}
+                    hariLibur={hariLibur}
+                    attendanceLogs={attendanceLogs}
+                    periodeAkademik={periodeAkademik}
+                    onSyncNeeded={onManualRefresh}
+                    isSyncing={isSyncing}
+                  />
+                </div>
+
+                <span className="text-xs font-bold text-slate-400 shrink-0">s/d</span>
+
+                {/* Kotak Tanggal Selesai */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-medium text-slate-500 shrink-0">Selesai:</span>
+                  <CalendarDatePickerPopover
+                    selectedDate={weeklyEndDate}
+                    onChangeDate={handleWeeklyEndDateChange}
+                    hariLibur={hariLibur}
+                    attendanceLogs={attendanceLogs}
+                    periodeAkademik={periodeAkademik}
+                    onSyncNeeded={onManualRefresh}
+                    isSyncing={isSyncing}
+                  />
+                </div>
+
+                {/* Tombol Pintas Pekan Ini & Pekan Lalu */}
+                <div className="flex items-center gap-1 ml-0.5">
+                  <button
+                    type="button"
+                    onClick={handleSetThisWeek}
+                    className="px-2.5 py-1 text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition cursor-pointer"
+                    title="Pilih rentang Senin s/d Jumat pekan ini"
+                  >
+                    Pekan Ini
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSetLastWeek}
+                    className="px-2.5 py-1 text-[11px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition cursor-pointer"
+                    title="Pilih rentang Senin s/d Jumat pekan lalu"
+                  >
+                    Pekan Lalu
+                  </button>
+                </div>
+              </div>
+            ) : (
+              // MODE HARIAN / BULANAN / SEMESTERAN: SATU KOTAK TANGGAL ACUAN
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-bold text-slate-700 shrink-0">Tanggal Acuan:</span>
+                <CalendarDatePickerPopover
+                  selectedDate={reportDate}
+                  onChangeDate={newDate => setReportDate(newDate)}
+                  hariLibur={hariLibur}
+                  attendanceLogs={attendanceLogs}
+                  periodeAkademik={periodeAkademik}
+                  onSyncNeeded={onManualRefresh}
+                  isSyncing={isSyncing}
+                />
+              </div>
+            )}
 
             {onManualRefresh && (
               <button
@@ -561,6 +993,168 @@ _Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
             </button>
           </div>
         </div>
+
+        {/* BADGE KALENDER AKADEMIK & HARI EFEKTIF KBM (PRESISI SMART ENGINE) */}
+        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span className="font-bold text-slate-700 flex items-center gap-1.5">
+              <CalendarDays className="w-4 h-4 text-indigo-600" />
+              <span>Periode Akademik:</span>
+              <strong className="text-indigo-900 font-mono bg-indigo-100/70 px-2 py-0.5 rounded border border-indigo-200">
+                {periodeAkademik.mulaiSemester} s/d {periodeAkademik.akhirSemester}
+              </strong>
+              {periodeAkademik.tahunAjaran && (
+                <span className="text-slate-500 font-medium">({periodeAkademik.tahunAjaran})</span>
+              )}
+            </span>
+
+            <span className="hidden md:inline text-slate-300">|</span>
+
+            <span className="text-slate-600 flex items-center gap-1.5">
+              <span>Hari Efektif KBM:</span>
+              <strong className="text-emerald-700 font-bold font-mono bg-emerald-100/70 px-2 py-0.5 rounded border border-emerald-200">
+                {reportStats.activeDays} Hari Aktif
+              </strong>
+              <span className="text-slate-500">
+                (Dipotong {reportStats.weekendDays} Akhir Pekan & {reportStats.holidayDays} Libur)
+              </span>
+            </span>
+          </div>
+
+          {/* Tombol Buka/Tutup Rincian Hari Libur */}
+          <button
+            onClick={() => setIsHolidaysExpanded(prev => !prev)}
+            className="flex items-center gap-1 text-slate-600 hover:text-indigo-600 font-semibold text-xs cursor-pointer self-start md:self-auto transition"
+          >
+            <Palmtree className="w-3.5 h-3.5 text-amber-600" />
+            <span>Lihat Daftar Hari Libur ({hariLibur.length})</span>
+            {isHolidaysExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+
+        {/* PANEL RINCIAN HARI LIBUR & PERIODE AKADEMIK (COLLAPSIBLE) */}
+        {isHolidaysExpanded && (
+          <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-xl space-y-3 animate-in fade-in duration-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Palmtree className="w-4 h-4 text-amber-600" />
+                <h4 className="font-bold text-xs text-amber-950">
+                  Daftar Hari Libur Nasional & Cuti Bersama (Sheet <code>HariLibur</code>)
+                </h4>
+              </div>
+              <span className="text-[10.5px] font-mono text-amber-800 bg-amber-100 px-2 py-0.5 rounded border border-amber-300">
+                Format Baku: DD/MM/YYYY
+              </span>
+            </div>
+
+            <p className="text-[11px] text-amber-800 leading-relaxed">
+              *Catatan Sistem:* Hari <strong>Sabtu dan Minggu</strong> otomatis dibuang oleh logika sistem tanpa perlu dimasukkan ke sheet. Admin hanya perlu mencatat hari libur nasional atau cuti bersama di bawah ini.
+            </p>
+
+            {hariLibur.length === 0 ? (
+              <div className="p-4 bg-white/95 rounded-xl text-center border border-amber-200 py-6 space-y-1.5 shadow-2xs">
+                <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center mx-auto text-amber-700">
+                  <Palmtree className="w-4.5 h-4.5" />
+                </div>
+                <h5 className="font-bold text-xs text-amber-950 uppercase tracking-wide">Belum ada data libur</h5>
+                <p className="text-[11.5px] text-slate-500 max-w-md mx-auto">
+                  Belum ada data libur yang diinput pada sheet <code className="bg-amber-100/70 text-amber-900 font-semibold px-1 py-0.5 rounded font-mono">HariLibur</code>. Sistem secara otomatis menghitung murni hari aktif Senin s/d Jumat (akhir pekan otomatis libur).
+                </p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-lg border border-amber-200 overflow-hidden shadow-2xs">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-amber-100/70 text-amber-950 border-b border-amber-200 font-bold text-[11px]">
+                    <tr>
+                      <th className="py-2 px-3">No</th>
+                      <th className="py-2 px-3">Tanggal (DD/MM/YYYY)</th>
+                      <th className="py-2 px-3">Keterangan Hari Libur</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-amber-100">
+                    {hariLibur.map((h, idx) => (
+                      <tr key={idx} className="hover:bg-amber-50/50">
+                        <td className="py-2 px-3 font-mono text-slate-400">{idx + 1}</td>
+                        <td className="py-2 px-3 font-mono font-bold text-indigo-900">{h.tanggal}</td>
+                        <td className="py-2 px-3 text-slate-800 font-medium">{h.keterangan}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* KARTU KHUSUS RINCIAN TANGGAL LIBUR & SESI YANG DIPOTONG */}
+        {reportStats.holidaysEncountered && reportStats.holidaysEncountered.length > 0 && (
+          <div className="p-4 bg-gradient-to-r from-rose-50/90 via-amber-50/70 to-rose-50/90 border border-rose-200/80 rounded-2xl shadow-2xs space-y-2.5 mt-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-rose-200/60 pb-2">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-rose-100 text-rose-700">
+                  <Palmtree className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-xs text-rose-950 flex items-center gap-1.5">
+                    <span>Rincian Hari Libur & Pemotongan Sesi KBM</span>
+                    <span className="text-[10px] bg-rose-200/80 text-rose-800 px-1.5 py-0.5 rounded font-mono font-bold">
+                      {reportStats.holidayDays} Hari Libur
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-rose-800/90">
+                    Sesi KBM pada tanggal merah resmi otomatis dipotong dan dikecualikan 100% dari total target jadwal.
+                  </p>
+                </div>
+              </div>
+
+              {(reportStats.totalHolidaySessionsExcluded ?? 0) > 0 && (
+                <div className="text-left sm:text-right shrink-0">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 block">Total Sesi Dikecualikan</span>
+                  <span className="text-sm font-black font-mono text-rose-800 tabular-nums">
+                    -{reportStats.totalHolidaySessionsExcluded} Sesi KBM
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 pt-0.5">
+              {reportStats.holidaysEncountered.map((h, i) => (
+                <div key={i} className="flex items-start justify-between gap-2 p-2.5 rounded-xl bg-white border border-rose-200/70 text-xs shadow-2xs">
+                  <div>
+                    <div className="font-bold font-mono text-indigo-950 flex items-center gap-1">
+                      <span>{h.tanggal}</span>
+                      {h.hari && <span className="text-slate-500 font-sans font-normal">({h.hari})</span>}
+                    </div>
+                    <div className="text-[11px] text-slate-600 line-clamp-1 mt-0.5" title={h.keterangan}>
+                      {h.keterangan}
+                    </div>
+                  </div>
+                  {h.sesiDikecualikan !== undefined && h.sesiDikecualikan > 0 && (
+                    <span className="text-[10.5px] font-mono font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200 shrink-0">
+                      -{h.sesiDikecualikan} sesi
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* LENCANA INFORMASI CUT-OFF HARI MENDATANG PADA PEKAN BERJALAN */}
+        {periodMode === 'weekly' && reportStats.upcomingDaysEncountered && reportStats.upcomingDaysEncountered.length > 0 && (
+          <div className="p-3 bg-indigo-50/70 border border-indigo-200/80 rounded-xl flex items-center gap-2.5 text-xs text-indigo-950 mt-2">
+            <span className="p-1 rounded-md bg-indigo-100 text-indigo-700 shrink-0">
+              <Calendar className="w-3.5 h-3.5" />
+            </span>
+            <div className="flex-1">
+              <span className="font-bold">Realisasi Berjalan s/d {reportStats.cutOffDateFormatted}: </span>
+              <span className="text-slate-700">
+                Terdapat <strong>{reportStats.upcomingDaysEncountered.length} hari KBM mendatang</strong> ({reportStats.upcomingDaysEncountered.map(u => `${u.hari} ${u.tanggal}: ${u.sesiPending} sesi`).join(', ')}) yang belum berlangsung, sehingga jadwalnya <strong>belum dimasukkan</strong> ke pembagi target berjalan.
+              </span>
+            </div>
+          </div>
+        )}
+
       </div>
 
       {/* 5 KARTU STATISTIK UTAMA (TERMASUK TOTAL KEPATUHAN GURU MENGISI APLIKASI) */}
@@ -577,7 +1171,9 @@ _Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
             </span>
             <span className="text-xs text-slate-500 font-semibold">Sesi</span>
           </div>
-          <span className="text-[10px] text-slate-400 mt-1">Jadwal KBM Resmi</span>
+          <span className="text-[10px] text-slate-400 mt-1">
+            {reportStats.activeDays} Hari Aktif KBM
+          </span>
         </div>
 
         {/* KARTU 2: SESI HADIR / MENGAJAR */}
@@ -661,7 +1257,7 @@ _Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
           </div>
 
           {/* Legend Warna Grafik */}
-          <div className="flex items-center gap-4 text-xs font-medium">
+          <div className="flex items-center gap-3 sm:gap-4 text-xs font-medium flex-wrap">
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded bg-emerald-500 inline-block border border-emerald-600"></span>
               <span className="text-slate-700 font-semibold">% Kehadiran KBM</span>
@@ -669,6 +1265,14 @@ _Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded bg-indigo-500 inline-block border border-indigo-600"></span>
               <span className="text-slate-700 font-semibold">% Kepatuhan Aplikasi</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded border border-dashed border-rose-400 bg-rose-100 inline-block"></span>
+              <span className="text-rose-700 font-semibold text-[11px]">Hari Libur</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded border border-dashed border-slate-400 bg-slate-200 inline-block"></span>
+              <span className="text-slate-600 font-semibold text-[11px]">Belum Dimulai</span>
             </div>
           </div>
         </div>
@@ -694,34 +1298,66 @@ _Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
               >
                 {/* Tooltip Hover Detil */}
                 {hoveredBarIndex === idx && (
-                  <div className="absolute -top-12 bg-slate-900 text-white text-[10px] font-mono p-2 rounded-lg shadow-xl z-30 whitespace-nowrap border border-slate-700 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="absolute -top-14 bg-slate-900 text-white text-[10px] font-mono p-2.5 rounded-lg shadow-xl z-30 whitespace-nowrap border border-slate-700 animate-in fade-in zoom-in-95 duration-150">
                     <div className="font-bold border-b border-slate-700 pb-0.5 mb-1 text-amber-300">{item.label}</div>
-                    <div className="text-emerald-300">✅ Kehadiran: {item.presencePercent}% ({item.presentCount} Sesi)</div>
-                    <div className="text-indigo-300">📱 Kepatuhan: {item.appCompliancePercent}% ({item.filledCount} Sesi)</div>
+                    {item.isHoliday ? (
+                      <div className="text-rose-300">
+                        🏖️ Libur Resmi: {item.holidayDesc || 'Hari Libur'} ({item.sessionsExcluded ?? 0} Sesi KBM Dikecualikan)
+                      </div>
+                    ) : item.isUpcoming ? (
+                      <div className="text-sky-300">
+                        ⏳ Belum Dimulai: Jadwal {item.upcomingSessions ?? 0} sesi KBM belum masuk target berjalan
+                      </div>
+                    ) : (
+                      <>
+                        <div className="text-emerald-300">✅ Kehadiran: {item.presencePercent}% ({item.presentCount} Sesi)</div>
+                        <div className="text-indigo-300">📱 Kepatuhan: {item.appCompliancePercent}% ({item.filledCount} Sesi)</div>
+                      </>
+                    )}
                   </div>
                 )}
 
                 {/* Pasangan 2 Batang Bar Chart */}
-                <div className="flex items-end justify-center gap-1 w-full max-w-[48px] h-full pt-4">
-                  {/* Batang 1: % Kehadiran (Emerald) */}
-                  <div 
-                    className="w-1/2 bg-gradient-to-t from-emerald-600 to-emerald-400 rounded-t-md transition-all duration-300 group-hover:brightness-110 shadow-2xs relative flex justify-center"
-                    style={{ height: `${Math.max(6, item.presencePercent)}%` }}
-                  >
-                    <span className="text-[9px] font-bold text-white font-mono -top-4 absolute hidden sm:block opacity-90">
-                      {item.presencePercent}%
-                    </span>
-                  </div>
+                <div className="flex items-end justify-center gap-1 w-full max-w-[56px] h-full pt-4">
+                  {item.isHoliday ? (
+                    <div className="w-full h-10 bg-rose-50/90 border border-dashed border-rose-300 rounded-t-lg flex flex-col items-center justify-center p-0.5 text-center shadow-2xs">
+                      <span className="text-[8.5px] font-black text-rose-600 font-mono tracking-wider">LIBUR</span>
+                      {item.holidayDesc && (
+                        <span className="text-[7.5px] text-rose-500 font-sans truncate max-w-full font-medium px-1" title={item.holidayDesc}>
+                          {item.holidayDesc}
+                        </span>
+                      )}
+                    </div>
+                  ) : item.isUpcoming ? (
+                    <div className="w-full h-10 bg-slate-100/90 border border-dashed border-slate-300 rounded-t-lg flex flex-col items-center justify-center p-0.5 text-center shadow-2xs">
+                      <span className="text-[8px] font-black text-slate-500 font-mono tracking-wider">BELUM DIMULAI</span>
+                      <span className="text-[7.5px] text-slate-400 font-sans">
+                        {item.upcomingSessions ? `${item.upcomingSessions} sesi` : 'Mendatang'}
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Batang 1: % Kehadiran (Emerald) */}
+                      <div 
+                        className="w-1/2 bg-gradient-to-t from-emerald-600 to-emerald-400 rounded-t-md transition-all duration-300 group-hover:brightness-110 shadow-2xs relative flex justify-center"
+                        style={{ height: `${Math.max(6, item.presencePercent)}%` }}
+                      >
+                        <span className="text-[9px] font-bold text-white font-mono -top-4 absolute hidden sm:block opacity-90">
+                          {item.presencePercent}%
+                        </span>
+                      </div>
 
-                  {/* Batang 2: % Kepatuhan Aplikasi (Indigo) */}
-                  <div 
-                    className="w-1/2 bg-gradient-to-t from-indigo-600 to-indigo-400 rounded-t-md transition-all duration-300 group-hover:brightness-110 shadow-2xs relative flex justify-center"
-                    style={{ height: `${Math.max(6, item.appCompliancePercent)}%` }}
-                  >
-                    <span className="text-[9px] font-bold text-white font-mono -top-4 absolute hidden sm:block opacity-90">
-                      {item.appCompliancePercent}%
-                    </span>
-                  </div>
+                      {/* Batang 2: % Kepatuhan Aplikasi (Indigo) */}
+                      <div 
+                        className="w-1/2 bg-gradient-to-t from-indigo-600 to-indigo-400 rounded-t-md transition-all duration-300 group-hover:brightness-110 shadow-2xs relative flex justify-center"
+                        style={{ height: `${Math.max(6, item.appCompliancePercent)}%` }}
+                      >
+                        <span className="text-[9px] font-bold text-white font-mono -top-4 absolute hidden sm:block opacity-90">
+                          {item.appCompliancePercent}%
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Label Sumbu X */}

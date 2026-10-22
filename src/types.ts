@@ -45,19 +45,22 @@ export interface AttendanceLogItem {
   kelas: string; // e.g. "Kelas VII A" or "VII-A"
   mapelKe: number; // e.g. 1, 2
   kodeGuru: string; // e.g. "G-01" / "DZ"
-  statusKehadiran: 'Hadir' | 'Sakit' | 'Keperluan Pribadi' | 'Dinas Luar' | 'Instruksi Pimpinan' | 'Izin' | string;
+  statusKehadiran: 'Hadir' | 'Sakit' | 'Keperluan Pribadi' | 'Dinas Luar' | 'Instruksi Pimpinan' | 'Tanpa Keterangan' | 'Izin' | string;
   mataPelajaran?: string;
   kegiatanPembelajaran?: string;
   pengganti: 'Y' | 'N';
   infoKetidakhadiran?: string;
   ruangBelajar?: string;
   idKiriman: string;
+  diinputOleh?: string;
+  diubahOleh?: string;
 
   // Metadata hasil parsing rentang jam jika ada
   jamKe?: string;
   jamMulai?: string;
   jamSelesai?: string;
   sumberData?: string;
+  penginputData?: string;
   startPeriod?: number;
   endPeriod?: number;
   spanJP?: number;
@@ -88,6 +91,31 @@ export interface AdminSession {
 // Backward compatibility alias for AttendanceRecord
 export type AttendanceRecord = AttendanceLogItem;
 
+export interface HariLiburItem {
+  tanggal: string; // Format baku "DD/MM/YYYY" (contoh: "17/08/2026")
+  keterangan: string; // contoh: "HUT Proklamasi Kemerdekaan RI"
+}
+
+export interface PeriodeAkademik {
+  mulaiSemester: string; // Format baku "DD/MM/YYYY" (contoh: "01/06/2026")
+  selesaiSemester: string; // Format baku "DD/MM/YYYY" (contoh: "20/12/2026")
+  akhirSemester?: string; // Alias backward-compatibility untuk selesaiSemester
+  tahunAjaran?: string; // contoh: "2026/2027 Ganjil"
+}
+
+export interface HariEfektifResult {
+  hariEfektif: number; // Jumlah hari kerja sekolah aktif (Senin-Jumat non-libur)
+  totalHariKalender: number; // Total rentang hari kalender
+  hariSabtuMinggu: number; // Jumlah hari Sabtu & Minggu yang diabaikan
+  hariLiburNasional: number; // Jumlah tanggal merah di hari kerja yang dipotong
+  daftarTanggalLibur: Array<{ tanggal: string; keterangan: string }>; // Rincian libur nasional yang dilewati
+  daftarTanggalEfektif: string[]; // Array tanggal DD/MM/YYYY yang aktif KBM
+  rentangDigunakan: {
+    mulai: string; // Tanggal mulai efektif setelah dibatasi periode
+    akhir: string; // Tanggal akhir efektif setelah dibatasi periode
+  };
+}
+
 export interface TapakDatabaseBundle {
   masterGuru: MasterGuru[];
   masterMapel: MasterMapel[];
@@ -96,6 +124,8 @@ export interface TapakDatabaseBundle {
   schedules: ScheduleItem[];
   attendanceLogs: AttendanceLogItem[];
   masterLogin?: MasterLoginAccount[];
+  hariLibur?: HariLiburItem[];
+  periodeAkademik?: PeriodeAkademik;
   lastUpdated?: string;
 }
 
@@ -137,6 +167,6 @@ export interface TeacherInfo {
   noHp?: string;
 }
 
-export type ViewTab = 'matrix' | 'empty-classes' | 'feed' | 'reports';
+export type ViewTab = 'matrix' | 'empty-classes' | 'feed' | 'piket' | 'reports';
 
 export type DayType = 'regular' | 'friday' | 'weekend';

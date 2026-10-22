@@ -6,7 +6,6 @@ import {
   CheckCircle2, 
   UserCheck, 
   BookOpen, 
-  Printer,
   Layers,
   MapPin,
   AlertCircle,
@@ -25,6 +24,17 @@ export const DetailModal: React.FC<DetailModalProps> = ({
   if (!slot) return null;
 
   const { schedule, teacher, subject, activeRoom, defaultRoom, attendance, statusColor, statusLabel } = slot;
+
+  // Cek apakah data diinput dari Agenda Piket (bukan presensi mandiri guru)
+  const isPiketRecord = Boolean(
+    attendance && (
+      (attendance.sumberData && 
+       !attendance.sumberData.toLowerCase().includes('mandiri') && 
+       !attendance.sumberData.toLowerCase().includes('aplikasi')) ||
+      (attendance.idKiriman && attendance.idKiriman.endsWith('PIKET')) ||
+      Boolean(attendance.penginputData && attendance.penginputData.trim())
+    )
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-950/70 backdrop-blur-xs">
@@ -179,6 +189,31 @@ export const DetailModal: React.FC<DetailModalProps> = ({
             </div>
           )}
 
+          {/* Kartu Informasi Penginputan Agenda Piket & Sumber Data */}
+          {attendance && isPiketRecord && (
+            <div className="p-3.5 rounded-xl bg-indigo-50/80 border border-indigo-200 text-indigo-950 space-y-1">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 font-bold text-xs text-indigo-900">
+                  <UserCheck className="w-4 h-4 text-indigo-600" />
+                  <span>Diisi oleh Guru Piket</span>
+                </div>
+                <span className="text-[10px] font-mono font-bold bg-indigo-200/80 text-indigo-900 px-2 py-0.5 rounded-full border border-indigo-300/60">
+                  Mode Piket
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs pt-1.5 border-t border-indigo-200/60 mt-1">
+                <div>
+                  <span className="text-slate-500 text-[10.5px] block font-medium">Sumber Data:</span>
+                  <span className="font-bold text-slate-800">{attendance.sumberData || 'Agenda Kelas'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 text-[10.5px] block font-medium">Nama Penginput:</span>
+                  <span className="font-bold text-slate-800">{attendance.penginputData || attendance.diinputOleh || 'Petugas Piket'}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ID Kiriman & Verifikasi Database */}
           {attendance?.idKiriman && (
             <div className="p-2.5 rounded-lg bg-slate-100/70 border border-slate-200 flex items-center justify-between text-[11px] text-slate-500 font-mono">
@@ -192,15 +227,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
-          <button
-            onClick={() => window.print()}
-            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 flex items-center gap-1.5 transition-colors cursor-pointer"
-          >
-            <Printer className="w-3.5 h-3.5" />
-            <span>Cetak Lembar Presensi</span>
-          </button>
-
+        <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-end">
           <button
             onClick={onClose}
             className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-slate-900 text-white hover:bg-slate-800 transition-colors cursor-pointer"

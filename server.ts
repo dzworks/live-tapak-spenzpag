@@ -186,8 +186,8 @@ async function startServer() {
       const bundle = data?.data || data;
       const hasSheets = bundle && (bundle.schedules || bundle.Schedules || bundle.masterGuru || bundle.MasterGuru);
       const detailInfo = data?.counts 
-        ? `Terdeteksi ${data.counts.classes || 0} Kelas, ${data.counts.schedules || 0} Jadwal, ${data.counts.attendanceLogs || 0} Log Presensi`
-        : (hasSheets ? 'Format 6 sheet TAPAK terdeteksi valid' : 'Respons diterima');
+        ? `Terdeteksi ${data.counts.classes || 0} Kelas, ${data.counts.schedules || 0} Jadwal, ${data.counts.attendanceLogs || 0} Log Presensi, ${data.counts.hariLibur || 0} Hari Libur`
+        : (hasSheets ? 'Format 9 sheet TAPAK terdeteksi valid' : 'Respons diterima');
       return res.json({
         success: true,
         message: 'Koneksi ke Google Apps Script berhasil terverifikasi!',

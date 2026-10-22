@@ -11,14 +11,19 @@ Backend ini dirancang sebagai **Google Apps Script Mandiri (Standalone Project)*
 
 ---
 
-## 6 Sheet yang Dibaca Secara Otomatis:
-Skrip akan membaca seluruh 6 sheet berikut dalam 1 panggilan API JSON (All-in-One):
+## 9 Sheet yang Dibaca Secara Otomatis:
+Skrip akan membaca seluruh 9 sheet berikut dalam 1 panggilan API JSON (All-in-One):
 1. **`MasterGuru`** (`Kode Guru`, `Nama Lengkap`, `NIP`)
 2. **`MasterMapel`** (`Kode Mapel`, `Nama Mapel`)
 3. **`Classes`** (`Token QR`, `ID Kelas`, `Nama Kelas`, `Lokasi Ruang`)
 4. **`MasterRuangan`** (`Token QR`, `Nama Ruangan`, `PIN Akses`)
 5. **`Schedules`** (`Hari`, `Jam Ke`, `Mapel Ke`, `Nama Kelas`, `Jam Mulai`, `Jam Selesai`, `Kode Guru`, `Kode Mapel`)
 6. **`AttendanceLogs`** (`Tanggal`, `Waktu Absen (WIB)`, `Kelas`, `Mapel Ke`, `Kode Guru`, `Status Kehadiran`, `Mata Pelajaran`, `Kegiatan Pembelajaran`, `Pengganti (Y/N)`, `Info Ketidakhadiran`, `Ruang Belajar`, `ID Kiriman`)
+7. **`MasterLogin`** (`Nama`, `Jabatan`, `Username`, `Password`, `Role`)
+8. **`HariLibur`** (`Tanggal` format DD/MM/YYYY, `Keterangan`)
+9. **`PeriodeAkademik`** (`Mulai Semester` format DD/MM/YYYY, `Selesai Semester` format DD/MM/YYYY, `Tahun Ajaran`)
+
+*Catatan Cerdas:* Logika fungsi `hitungHariEfektif` otomatis mengecualikan hari Sabtu dan Minggu (sistem 5 hari sekolah), sehingga Admin TU tidak perlu menginput akhir pekan ke dalam sheet `HariLibur`. Cukup input libur nasional atau cuti bersama saja.
 
 ---
 

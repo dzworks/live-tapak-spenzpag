@@ -1,6 +1,6 @@
 import React from 'react';
 import { ViewTab, AdminSession } from '../types';
-import { LayoutGrid, ListFilter, RefreshCw, Tv, Wifi, ShieldCheck, LogOut, FileText } from 'lucide-react';
+import { LayoutGrid, ListFilter, RefreshCw, Tv, Wifi, ShieldCheck, LogOut, FileText, ClipboardCheck, Clock, Sparkles } from 'lucide-react';
 
 interface TopNavProps {
   currentTab: ViewTab;
@@ -15,6 +15,11 @@ interface TopNavProps {
   onOpenAdminModal?: () => void;
   adminSession?: AdminSession | null;
   onLogout?: () => void;
+  activePeriodNumber?: number;
+  isWeekend?: boolean;
+  timeRangeText?: string;
+  kbmStatusText?: string;
+  kbmStatusColor?: string;
 }
 
 export const TopNav: React.FC<TopNavProps> = ({
@@ -30,9 +35,14 @@ export const TopNav: React.FC<TopNavProps> = ({
   onOpenAdminModal,
   adminSession,
   onLogout,
+  activePeriodNumber = 1,
+  isWeekend = false,
+  timeRangeText = '07:00 - 14:00',
+  kbmStatusText = 'KBM Berjalan Lancar',
+  kbmStatusColor = 'text-emerald-300 bg-emerald-950/60 border-emerald-700/60',
 }) => {
   return (
-    <header className="sticky top-0 z-40 bg-slate-900 border-b border-slate-800 text-slate-100">
+    <header className="sticky top-0 z-40 bg-slate-900 border-b border-slate-800 text-slate-100 shadow-md">
       <div className="max-w-7xl mx-auto px-3 sm:px-5 lg:px-6">
         <div className="flex items-center justify-between gap-4 h-13">
           {/* Zone 1: Single text element wordmark with school identity */}
@@ -61,7 +71,7 @@ export const TopNav: React.FC<TopNavProps> = ({
               }`}
             >
               <LayoutGrid className="w-3.5 h-3.5" />
-              <span>Matriks 23 Kelas</span>
+              <span>Dashboard</span>
             </button>
 
             <button
@@ -75,6 +85,20 @@ export const TopNav: React.FC<TopNavProps> = ({
               <ListFilter className="w-3.5 h-3.5" />
               <span>Daftar Presensi</span>
             </button>
+
+            {adminSession && (
+              <button
+                onClick={() => onTabChange('piket')}
+                className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  currentTab === 'piket'
+                    ? 'bg-slate-800 text-indigo-400 shadow-xs font-semibold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <ClipboardCheck className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Agenda Piket</span>
+              </button>
+            )}
 
             {adminSession && (
               <button
@@ -183,13 +207,54 @@ export const TopNav: React.FC<TopNavProps> = ({
           </div>
         </div>
 
+        {/* Baris Sub-Header: Freeze Live Status (Jam ke-X, Durasi, Realtime Clock, Status KBM) Tepat di bawah TAPAK Live Monitor */}
+        <div className="py-1.5 border-t border-slate-800/80 flex items-center justify-between gap-2 flex-wrap text-xs font-mono">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap min-w-0">
+            {/* 1. Jam Ke */}
+            <span className="text-xs sm:text-sm font-black font-mono tracking-tight text-white flex items-center gap-1.5 shrink-0">
+              <span className="bg-gradient-to-r from-indigo-600 to-indigo-500 text-white px-2 py-0.5 rounded-md shadow-xs border border-indigo-400/50">
+                {isWeekend ? 'AKHIR PEKAN' : `Jam ke-${activePeriodNumber}`}
+              </span>
+            </span>
+
+            {/* 2. Durasi Waktu Jam KBM */}
+            <div className="flex items-center gap-1 bg-slate-950/80 text-slate-200 px-2 py-0.5 rounded-md border border-slate-800 font-mono text-xs font-semibold tracking-tight shadow-inner shrink-0">
+              <Clock className="w-3 h-3 text-indigo-400 shrink-0" />
+              <span className="text-slate-400 text-[10px] font-normal hidden sm:inline">Durasi:</span>
+              <span>{isWeekend ? 'Hari Libur' : timeRangeText} WIB</span>
+            </div>
+
+            <span className="text-slate-700 hidden min-[400px]:inline text-xs">·</span>
+
+            {/* 3. Jam Realtime WIB Digital */}
+            <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-0.5 rounded-md border border-emerald-500/40 shadow-inner shrink-0">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span className="text-slate-400 text-[10px] font-normal hidden min-[480px]:inline">Realtime:</span>
+              <span className="text-emerald-400 font-mono font-black tracking-wider text-xs">
+                {wibTime}
+              </span>
+            </div>
+
+            {/* Status Kelancaran KBM */}
+            {kbmStatusText && (
+              <span className={`text-[10.5px] font-bold px-2 py-0.5 rounded-full border inline-flex items-center gap-1 shrink-0 ${kbmStatusColor}`}>
+                <Sparkles className="w-3 h-3" />
+                {kbmStatusText}
+              </span>
+            )}
+          </div>
+        </div>
+
         {/* Mobile Navigation bar */}
         <div className="md:hidden flex items-center justify-around py-1.5 border-t border-slate-800 text-xs">
           <button
             onClick={() => onTabChange('matrix')}
             className={`px-2 py-1 rounded-md cursor-pointer transition-colors ${currentTab === 'matrix' ? 'bg-slate-800 text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
           >
-            Matriks
+            Dashboard
           </button>
           <button
             onClick={() => onTabChange('feed')}
@@ -197,6 +262,15 @@ export const TopNav: React.FC<TopNavProps> = ({
           >
             Presensi
           </button>
+          {adminSession && (
+            <button
+              onClick={() => onTabChange('piket')}
+              className={`px-2 py-1 rounded-md cursor-pointer transition-colors flex items-center gap-1 ${currentTab === 'piket' ? 'bg-slate-800 text-indigo-400 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              <ClipboardCheck className="w-3 h-3 text-indigo-400" />
+              <span>Piket</span>
+            </button>
+          )}
           {adminSession && (
             <button
               onClick={() => onTabChange('reports')}
@@ -222,3 +296,4 @@ export const TopNav: React.FC<TopNavProps> = ({
     </header>
   );
 };
+

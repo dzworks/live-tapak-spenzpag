@@ -1,13 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { 
   BellRing, 
-  CheckCircle2, 
   Clock, 
   X, 
-  UserCheck, 
-  AlertCircle, 
-  ArrowRight,
-  Sparkles
+  ArrowRight
 } from 'lucide-react';
 
 export interface AttendanceAlertToast {
@@ -57,23 +53,21 @@ interface ToastItemProps {
 }
 
 const ToastItem: React.FC<ToastItemProps> = ({ toast, onDismiss, onSelectClass }) => {
-  const [progress, setProgress] = useState(100);
   const DURATION = 7000; // 7 detik
+  const onDismissRef = useRef(onDismiss);
+
+  // Pertahankan referensi callback terbaru tanpa mereset timer saat parent re-render
+  useEffect(() => {
+    onDismissRef.current = onDismiss;
+  }, [onDismiss]);
 
   useEffect(() => {
-    const start = Date.now();
-    const interval = setInterval(() => {
-      const elapsed = Date.now() - start;
-      const remainingPercent = Math.max(0, 100 - (elapsed / DURATION) * 100);
-      setProgress(remainingPercent);
-      if (remainingPercent <= 0) {
-        clearInterval(interval);
-        onDismiss(toast.id);
-      }
-    }, 50);
+    const timer = setTimeout(() => {
+      onDismissRef.current(toast.id);
+    }, DURATION);
 
-    return () => clearInterval(interval);
-  }, [toast.id, onDismiss]);
+    return () => clearTimeout(timer);
+  }, [toast.id]);
 
   const isInfal = toast.pengganti === 'Y';
   const isHadir = toast.statusKehadiran === 'Hadir';
@@ -134,6 +128,11 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onDismiss, onSelectClass }
                 Mapel: {toast.subjectName}
               </div>
             )}
+            {toast.namaPengganti && (
+              <div className="text-[10px] text-indigo-300/90 font-medium truncate pt-0.5">
+                {toast.namaPengganti}
+              </div>
+            )}
           </div>
 
           {/* Timestamp Indicator */}
@@ -159,13 +158,13 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onDismiss, onSelectClass }
         </button>
       </div>
 
-      {/* Animated Countdown Progress Bar */}
-      <div className="w-full h-1 bg-slate-800">
+      {/* Animated Countdown Progress Bar: berjalan mulus dari 0% ke 100% tanpa lompatan atau looping */}
+      <div className="w-full h-1 bg-slate-800/80 overflow-hidden">
         <div 
-          className="h-full bg-emerald-500 transition-all ease-linear"
-          style={{ width: `${progress}%` }}
+          className="h-full bg-emerald-500 animate-toast-progress rounded-r-full"
         />
       </div>
     </div>
   );
 };
+

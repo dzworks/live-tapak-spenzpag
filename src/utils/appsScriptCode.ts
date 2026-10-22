@@ -9,9 +9,18 @@ import {
   ResolvedScheduleSlot,
   PeriodSchedule,
   PeriodSchedule as PeriodType,
-  MasterLoginAccount
+  MasterLoginAccount,
+  HariLiburItem,
+  PeriodeAkademik,
+  HariEfektifResult
 } from '../types';
-import { PERIOD_SCHEDULES_REGULAR, PERIOD_SCHEDULES_FRIDAY, DEFAULT_MASTER_LOGIN } from '../data/initialData';
+import { 
+  PERIOD_SCHEDULES_REGULAR, 
+  PERIOD_SCHEDULES_FRIDAY, 
+  DEFAULT_MASTER_LOGIN,
+  DEFAULT_HARI_LIBUR,
+  DEFAULT_PERIODE_AKADEMIK
+} from '../data/initialData';
 
 const MONTH_NAMES_ID = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nop', 'Des'];
 
@@ -98,6 +107,231 @@ export function getTodayWIBDisplayDate(): string {
   const utc = now.getTime() + now.getTimezoneOffset() * 60000;
   const wibDate = new Date(utc + 3600000 * 7);
   return formatToIndonesianDisplayDate(wibDate);
+}
+
+/**
+ * Memformat tanggal ke bentuk standar baku DD/MM/YYYY (contoh: 17/08/2026)
+ */
+export function formatDateDMY(dateInput: string | Date | undefined | null): string {
+  if (!dateInput) return '';
+  const key = canonicalDateKey(dateInput);
+  if (!key) return String(dateInput);
+  const parts = key.split('-');
+  if (parts.length === 3) {
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  return String(dateInput);
+}
+
+/**
+ * Parsing string tanggal (berbagai format) ke objek Date JavaScript
+ */
+export function parseDateDMY(dateStr: string | Date | undefined | null): Date | null {
+  if (!dateStr) return null;
+  if (dateStr instanceof Date) return dateStr;
+  const key = canonicalDateKey(dateStr);
+  if (!key) return null;
+  const parts = key.split('-');
+  if (parts.length === 3) {
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+    return new Date(y, m, d, 12, 0, 0); // Gunakan jam 12 siang agar aman dari pergeseran timezone
+  }
+  return null;
+}
+
+/**
+ * Mengecek apakah tanggal jatuh pada akhir pekan (Sabtu = 6 atau Minggu = 0)
+ * Sesuai aturan 5 hari sekolah: Senin s/d Jumat
+ */
+export function isWeekend(dateInput: Date | string): boolean {
+  const d = dateInput instanceof Date ? dateInput : parseDateDMY(dateInput);
+  if (!d) return false;
+  const day = d.getDay();
+  return day === 0 || day === 6;
+}
+
+/**
+ * Mengecek apakah suatu tanggal terdaftar dalam daftar HariLibur
+ */
+export function isHolidayDate(
+  dateInput: Date | string,
+  holidays: HariLiburItem[] = []
+): { isHoliday: boolean; keterangan?: string } {
+  const key = canonicalDateKey(dateInput);
+  if (!key || !Array.isArray(holidays)) return { isHoliday: false };
+  const matched = holidays.find(h => canonicalDateKey(h.tanggal) === key);
+  if (matched) {
+    return { isHoliday: true, keterangan: matched.keterangan };
+  }
+  return { isHoliday: false };
+}
+
+/**
+ * Menghitung rincian hari efektif KBM secara cerdas:
+ * - Mengecualikan Sabtu & Minggu (aturan 5 hari sekolah: Senin s/d Jumat)
+ * - Mengecualikan tanggal dalam daftar sheet HariLibur
+ * - Otomatis membatasi rentang tanggal dalam batas Mulai Semester dan Selesai Semester jika periode disediakan
+ * - Mengembalikan objek detail lengkap jumlah hari efektif, hari libur, dan rincian tanggalnya
+ */
+export function hitungHariEfektif(
+  mulaiInput: Date | string,
+  akhirInput: Date | string,
+  libur: HariLiburItem[] = [],
+  periode?: PeriodeAkademik
+): HariEfektifResult {
+  let start = parseDateDMY(mulaiInput);
+  let end = parseDateDMY(akhirInput);
+
+  // Jika periode disediakan, batasi rentang tanggal agar tidak melampaui batas semester
+  if (periode) {
+    const periodStart = parseDateDMY(periode.mulaiSemester);
+    const periodEnd = parseDateDMY(periode.selesaiSemester || periode.akhirSemester);
+    if (periodStart && start && start < periodStart) {
+      start = periodStart;
+    }
+    if (periodEnd && end && end > periodEnd) {
+      end = periodEnd;
+    }
+  }
+
+  if (!start || !end || start > end) {
+    return {
+      hariEfektif: 0,
+      totalHariKalender: 0,
+      hariSabtuMinggu: 0,
+      hariLiburNasional: 0,
+      daftarTanggalLibur: [],
+      daftarTanggalEfektif: [],
+      rentangDigunakan: {
+        mulai: start ? formatDateDMY(start) : '',
+        akhir: end ? formatDateDMY(end) : '',
+      },
+    };
+  }
+
+  let totalHariKalender = 0;
+  let hariSabtuMinggu = 0;
+  let hariLiburNasional = 0;
+  let hariEfektif = 0;
+  const daftarTanggalLibur: Array<{ tanggal: string; keterangan: string }> = [];
+  const daftarTanggalEfektif: string[] = [];
+
+  const current = new Date(start);
+  while (current <= end) {
+    totalHariKalender++;
+    const dayOfWeek = current.getDay(); // 0 = Minggu, 6 = Sabtu
+    const dateFormatted = formatDateDMY(current);
+
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      hariSabtuMinggu++;
+    } else {
+      const holidayCheck = isHolidayDate(current, libur);
+      if (holidayCheck.isHoliday) {
+        hariLiburNasional++;
+        daftarTanggalLibur.push({
+          tanggal: dateFormatted,
+          keterangan: holidayCheck.keterangan || 'Hari Libur Nasional / Cuti Bersama',
+        });
+      } else {
+        hariEfektif++;
+        daftarTanggalEfektif.push(dateFormatted);
+      }
+    }
+
+    current.setDate(current.getDate() + 1);
+  }
+
+  return {
+    hariEfektif,
+    totalHariKalender,
+    hariSabtuMinggu,
+    hariLiburNasional,
+    daftarTanggalLibur,
+    daftarTanggalEfektif,
+    rentangDigunakan: {
+      mulai: formatDateDMY(start),
+      akhir: formatDateDMY(end),
+    },
+  };
+}
+
+export interface EffectiveSessionsResult {
+  totalSessions: number;
+  activeDays: number;
+  holidayDays: number;
+  weekendDays: number;
+  holidaysEncountered: Array<{ tanggal: string; keterangan: string }>;
+}
+
+/**
+ * Menghitung hari efektif KBM dan total sesi KBM terjadwal antara startDate dan endDate
+ * - Otomatis membuang Sabtu & Minggu (5 hari sekolah: Senin s/d Jumat)
+ * - Otomatis memotong tanggal merah dari daftar HariLibur
+ * - Menghitung jumlah sesi KBM yang terjadwal pada hari-hari aktif tersebut
+ */
+export function calculateEffectiveSchoolSessions(
+  startDateInput: Date | string,
+  endDateInput: Date | string,
+  schedules: ScheduleItem[],
+  holidays: HariLiburItem[] = []
+): EffectiveSessionsResult {
+  const start = parseDateDMY(startDateInput);
+  const end = parseDateDMY(endDateInput);
+
+  if (!start || !end || start > end) {
+    return {
+      totalSessions: 0,
+      activeDays: 0,
+      holidayDays: 0,
+      weekendDays: 0,
+      holidaysEncountered: [],
+    };
+  }
+
+  let totalSessions = 0;
+  let activeDays = 0;
+  let holidayDays = 0;
+  let weekendDays = 0;
+  const holidaysEncountered: Array<{ tanggal: string; keterangan: string }> = [];
+
+  const current = new Date(start);
+  while (current <= end) {
+    const dayOfWeek = current.getDay(); // 0 = Minggu, 6 = Sabtu
+
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      weekendDays++;
+    } else {
+      // Hari kerja (Senin..Jumat)
+      const holidayCheck = isHolidayDate(current, holidays);
+      if (holidayCheck.isHoliday) {
+        holidayDays++;
+        holidaysEncountered.push({
+          tanggal: formatDateDMY(current),
+          keterangan: holidayCheck.keterangan || 'Hari Libur Nasional',
+        });
+      } else {
+        activeDays++;
+        const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+        const dayName = dayNames[dayOfWeek];
+        const dayScheds = schedules.filter(
+          s => s.hari.toLowerCase() === dayName.toLowerCase() && !isSampleEntity({ kodeGuru: s.kodeGuru, kodeMapel: s.kodeMapel })
+        );
+        totalSessions += dayScheds.length;
+      }
+    }
+
+    current.setDate(current.getDate() + 1);
+  }
+
+  return {
+    totalSessions,
+    activeDays,
+    holidayDays,
+    weekendDays,
+    holidaysEncountered,
+  };
 }
 
 /**
@@ -220,7 +454,8 @@ export function enrichAttendanceLogItem(raw: any): AttendanceLogItem {
     jamKe: parsed.normalizedStr,
     jamMulai: String(raw.jamMulai || raw['Jam Mulai'] || '').trim(),
     jamSelesai: String(raw.jamSelesai || raw['Jam Selesai'] || '').trim(),
-    sumberData: String(raw.sumberData || raw['Sumber Data'] || '').trim(),
+    sumberData: String(raw.sumberData || raw['Sumber data'] || raw['Sumber Data'] || '').trim(),
+    penginputData: String(raw.penginputData || raw['Penginput Data'] || raw['penginputData'] || '').trim(),
     startPeriod: parsed.startPeriod,
     endPeriod: parsed.endPeriod,
     spanJP: parsed.spanJP,
@@ -311,6 +546,39 @@ export function processTapakBundle(rawBundle: any): TapakDatabaseBundle {
       })).filter((u: MasterLoginAccount) => Boolean(u.username && u.password))
     : DEFAULT_MASTER_LOGIN;
 
+  // HariLibur dari Sheet HariLibur: Tanggal (DD/MM/YYYY) | Keterangan
+  const rawHolidays = rawBundle.hariLibur !== undefined 
+    ? rawBundle.hariLibur 
+    : (rawBundle.HariLibur !== undefined ? rawBundle.HariLibur : rawBundle['hari_libur']);
+  const hariLibur: HariLiburItem[] = Array.isArray(rawHolidays)
+    ? rawHolidays.map((h: any) => ({
+        tanggal: formatDateDMY(h.tanggal || h['Tanggal'] || ''),
+        keterangan: String(h.keterangan || h['Keterangan'] || 'Hari Libur').trim(),
+      })).filter(h => Boolean(h.tanggal && h.keterangan))
+    : [];
+
+  // PeriodeAkademik dari Sheet PeriodeAkademik: Mulai Semester | Selesai Semester | Tahun Ajaran
+  const rawPeriod = rawBundle.periodeAkademik || rawBundle.PeriodeAkademik || rawBundle['periode_akademik'] || rawBundle.pengaturan || rawBundle.Pengaturan;
+  let periodeAkademik: PeriodeAkademik = DEFAULT_PERIODE_AKADEMIK;
+  if (Array.isArray(rawPeriod) && rawPeriod.length > 0) {
+    const p = rawPeriod[0];
+    const selesai = formatDateDMY(p.selesaiSemester || p['SelesaiSemester'] || p['Selesai Semester'] || p.akhirSemester || p['AkhirSemester'] || p['Akhir Semester'] || DEFAULT_PERIODE_AKADEMIK.selesaiSemester);
+    periodeAkademik = {
+      mulaiSemester: formatDateDMY(p.mulaiSemester || p['MulaiSemester'] || p['Mulai Semester'] || DEFAULT_PERIODE_AKADEMIK.mulaiSemester),
+      selesaiSemester: selesai,
+      akhirSemester: selesai,
+      tahunAjaran: String(p.tahunAjaran || p['TahunAjaran'] || p['Tahun Ajaran'] || DEFAULT_PERIODE_AKADEMIK.tahunAjaran).trim(),
+    };
+  } else if (rawPeriod && typeof rawPeriod === 'object') {
+    const selesai = formatDateDMY(rawPeriod.selesaiSemester || rawPeriod['SelesaiSemester'] || rawPeriod['Selesai Semester'] || rawPeriod.akhirSemester || rawPeriod['AkhirSemester'] || DEFAULT_PERIODE_AKADEMIK.selesaiSemester);
+    periodeAkademik = {
+      mulaiSemester: formatDateDMY(rawPeriod.mulaiSemester || rawPeriod['MulaiSemester'] || rawPeriod['Mulai Semester'] || DEFAULT_PERIODE_AKADEMIK.mulaiSemester),
+      selesaiSemester: selesai,
+      akhirSemester: selesai,
+      tahunAjaran: String(rawPeriod.tahunAjaran || rawPeriod['TahunAjaran'] || rawPeriod['Tahun Ajaran'] || DEFAULT_PERIODE_AKADEMIK.tahunAjaran).trim(),
+    };
+  }
+
   return {
     masterGuru,
     masterMapel,
@@ -319,6 +587,8 @@ export function processTapakBundle(rawBundle: any): TapakDatabaseBundle {
     schedules,
     attendanceLogs,
     masterLogin: masterLogin.length > 0 ? masterLogin : DEFAULT_MASTER_LOGIN,
+    hariLibur,
+    periodeAkademik,
     lastUpdated: new Date().toISOString(),
   };
 }
@@ -542,4 +812,208 @@ export function isSampleEntity(params: {
     checkText(params.lokasiRuang)
   );
 }
+
+/**
+ * Menghasilkan kode tunggal Google Apps Script (Code.gs) lengkap
+ * yang dapat disalin-tempel oleh admin ke Google Apps Script Editor.
+ */
+export function generateGoogleAppsScriptCode(): string {
+  return `/**
+ * ============================================================================
+ * GOOGLE APPS SCRIPT BACKEND ENGINE - TAPAK LIVE MONITORING
+ * ============================================================================
+ * Petunjuk Pemasangan:
+ * 1. Buka Google Spreadsheet data TAPAK Anda.
+ * 2. Klik menu Extensi -> Apps Script.
+ * 3. Hapus seluruh isi default pada file Code.gs, lalu tempelkan (paste) skrip ini.
+ * 4. Klik "Simpan" (Ctrl+S / Cmd+S).
+ * 5. Klik "Terapkan" (Deploy) -> "Penerapan Baru" (New Deployment).
+ * 6. Pilih Jenis: "Aplikasi Web" (Web App).
+ * 7. Setel "Jalankan sebagai": "Saya" (Me).
+ * 8. Setel "Siapa yang memiliki akses": "Siapa saja" (Anyone).
+ * 9. Klik "Terapkan", lalu salin URL Web App dan tempelkan pada Panel Admin TAPAK.
+ * ============================================================================
+ */
+
+function doGet(e) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var bundle = {};
+    
+    var sheets = ss.getSheets();
+    for (var i = 0; i < sheets.length; i++) {
+      var sheet = sheets[i];
+      var name = sheet.getName();
+      var key = normalizeSheetKey(name);
+      bundle[key] = getSheetDataAsJson(sheet);
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      data: bundle,
+      timestamp: new Date().toISOString()
+    })).setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      message: err.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function doPost(e) {
+  try {
+    var contents = e && e.postData && e.postData.contents ? e.postData.contents : null;
+    if (!contents) {
+      return ContentService.createTextOutput(JSON.stringify({
+        success: false,
+        message: "Payload kosong."
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var payload = JSON.parse(contents);
+    var action = payload.action || 'saveAttendanceLog';
+
+    if (action === 'saveAttendanceLog' || action === 'savePiketLog') {
+      return handleSaveAttendanceLog(payload);
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      message: "Aksi '" + action + "' tidak dikenali."
+    })).setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      message: "Gagal memproses request: " + err.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function handleSaveAttendanceLog(payload) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('attendancelogs');
+
+  // Jika sheet attendancelogs tidak ditemukan, kembalikan error
+  if (!sheet) {
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      message: "Tab sheet 'attendancelogs' tidak ditemukan pada Google Spreadsheet."
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  var logData = payload.logData || payload;
+  var idKiriman = String(logData['ID Kiriman'] || logData.idKiriman || '').trim();
+
+  if (!idKiriman) {
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      message: "ID Kiriman wajib diisi."
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // Baris nilai 17 kolom standar attendancelogs
+  var rowValues = [
+    logData['Tanggal'] || logData.tanggal || '',
+    logData['Waktu Absen (WIB)'] || logData.waktuAbsen || '',
+    logData['Kelas'] || logData.kelas || '',
+    logData['Mapel Ke'] || logData.mapelKe || 1,
+    logData['Kode Guru'] || logData.kodeGuru || '',
+    logData['Mata Pelajaran'] || logData.mataPelajaran || '',
+    logData['Status Kehadiran'] || logData.statusKehadiran || 'Hadir',
+    logData['Jam Ke'] || logData.jamKe || '',
+    logData['Jam Mulai'] || logData.jamMulai || '',
+    logData['Jam Selesai'] || logData.jamSelesai || '',
+    logData['Ruang Belajar'] || logData.ruangBelajar || 'Ruang Kelas',
+    logData['Kegiatan Pembelajaran'] || logData.kegiatanPembelajaran || '-',
+    logData['Info Ketidakhadiran'] || logData.infoKetidakhadiran || '-',
+    logData['Pengganti (Y/N)'] || logData.pengganti || 'N',
+    logData['Sumber Data'] || logData['Sumber data'] || logData.sumberData || 'Agenda Kelas',
+    logData['Penginput Data'] || logData.penginputData || 'Petugas Piket',
+    idKiriman
+  ];
+
+  // Cari apakah ID Kiriman sudah ada di Kolom Q (Kolom 17)
+  var lastRow = sheet.getLastRow();
+  var targetRow = -1;
+  var actionDone = 'inserted';
+
+  if (lastRow >= 2) {
+    var idRange = sheet.getRange(2, 17, lastRow - 1, 1).getValues();
+    for (var i = 0; i < idRange.length; i++) {
+      if (String(idRange[i][0]).trim() === idKiriman) {
+        targetRow = i + 2; // offset header
+        actionDone = 'updated';
+        break;
+      }
+    }
+  }
+
+  if (targetRow > 0) {
+    // Overwrite baris yang ada
+    sheet.getRange(targetRow, 1, 1, 17).setValues([rowValues]);
+  } else {
+    // Tambah baris baru
+    sheet.appendRow(rowValues);
+  }
+
+  return ContentService.createTextOutput(JSON.stringify({
+    success: true,
+    message: "Data presensi berhasil " + (actionDone === 'updated' ? 'diperbarui' : 'ditambahkan') + " pada sheet attendancelogs",
+    action: actionDone,
+    idKiriman: idKiriman,
+    timestamp: new Date().toISOString()
+  })).setMimeType(ContentService.MimeType.JSON);
+}
+
+function normalizeSheetKey(sheetName) {
+  var clean = sheetName.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (clean.indexOf('guru') !== -1 || clean.indexOf('masterguru') !== -1) return 'masterGuru';
+  if (clean.indexOf('mapel') !== -1 || clean.indexOf('mastermapel') !== -1) return 'masterMapel';
+  if (clean.indexOf('kelas') !== -1) return 'classes';
+  if (clean.indexOf('ruang') !== -1) return 'masterRuangan';
+  if (clean.indexOf('jadwal') !== -1 || clean.indexOf('schedule') !== -1) return 'schedules';
+  if (clean.indexOf('absen') !== -1 || clean.indexOf('attend') !== -1 || clean.indexOf('log') !== -1) return 'attendanceLogs';
+  if (clean.indexOf('login') !== -1 || clean.indexOf('user') !== -1) return 'masterLogin';
+  if (clean.indexOf('libur') !== -1) return 'hariLibur';
+  if (clean.indexOf('periode') !== -1 || clean.indexOf('pengaturan') !== -1) return 'periodeAkademik';
+  return sheetName;
+}
+
+function getSheetDataAsJson(sheet) {
+  var data = sheet.getDataRange().getValues();
+  if (!data || data.length < 2) return [];
+
+  var headers = data[0];
+  var result = [];
+
+  for (var r = 1; r < data.length; r++) {
+    var row = data[r];
+    var isEmpty = true;
+    var obj = {};
+
+    for (var c = 0; c < headers.length; c++) {
+      var headerName = String(headers[c]).trim();
+      var val = row[c];
+      if (val !== "" && val !== null && val !== undefined) {
+        isEmpty = false;
+      }
+      if (val instanceof Date) {
+        val = Utilities.formatDate(val, "Asia/Jakarta", "dd-MMM-yyyy");
+      }
+      obj[headerName] = val;
+    }
+
+    if (!isEmpty) {
+      result.push(obj);
+    }
+  }
+
+  return result;
+}
+`;
+}
+
 

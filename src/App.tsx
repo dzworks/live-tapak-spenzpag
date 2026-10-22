@@ -14,7 +14,9 @@ import {
   ResolvedScheduleSlot, 
   ViewTab,
   MasterLoginAccount,
-  AdminSession
+  AdminSession,
+  HariLiburItem,
+  PeriodeAkademik
 } from './types';
 import { CONFIG } from './config';
 import { 
@@ -25,6 +27,8 @@ import {
   DEFAULT_SCHEDULES,
   DEFAULT_ATTENDANCE_LOGS,
   DEFAULT_MASTER_LOGIN,
+  DEFAULT_HARI_LIBUR,
+  DEFAULT_PERIODE_AKADEMIK,
   getScheduleForDate, 
   getDayLabel, 
   getDayType 
@@ -39,6 +43,7 @@ import {
   formatToIndonesianDisplayDate,
   canonicalDateKey
 } from './utils/appsScriptCode';
+import { formatLogForSheetPayload } from './utils/piketLogUtils';
 import { TopNav } from './components/TopNav';
 import { UnconfirmedClassesSection } from './components/UnconfirmedClassesSection';
 import { ExecutiveInfographic } from './components/ExecutiveInfographic';
@@ -50,6 +55,7 @@ import { DetailModal } from './components/DetailModal';
 import { AdminUrlModal } from './components/AdminUrlModal';
 import { InitialSetupModal } from './components/InitialSetupModal';
 import { AttendanceToastContainer, AttendanceAlertToast } from './components/AttendanceToastContainer';
+import { AdminPiketAgendaWorkspace } from './components/AdminPiketAgendaWorkspace';
 import { 
   Calendar, 
   Info,
@@ -98,6 +104,26 @@ export default function App() {
     }
   });
 
+  // Database HariLibur dari Sheet HariLibur (Format DD/MM/YYYY)
+  const [hariLibur, setHariLibur] = useState<HariLiburItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('gurulive_tapak_harilibur_v3');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Konfigurasi PeriodeAkademik dari Sheet PeriodeAkademik (MulaiSemester s/d AkhirSemester)
+  const [periodeAkademik, setPeriodeAkademik] = useState<PeriodeAkademik>(() => {
+    try {
+      const saved = localStorage.getItem('gurulive_tapak_periodeakademik_v2');
+      return saved ? JSON.parse(saved) : DEFAULT_PERIODE_AKADEMIK;
+    } catch {
+      return DEFAULT_PERIODE_AKADEMIK;
+    }
+  });
+
   // Sesi Login Admin Aktif (Persisten di localStorage)
   const [adminSession, setAdminSession] = useState<AdminSession | null>(() => {
     try {
@@ -117,7 +143,7 @@ export default function App() {
 
   const handleLogout = useCallback(() => {
     setAdminSession(null);
-    setCurrentTab(prev => (prev === 'reports' ? 'matrix' : prev));
+    setCurrentTab(prev => (prev === 'reports' || prev === 'piket' ? 'matrix' : prev));
     try {
       localStorage.removeItem('gurulive_admin_session');
     } catch {}
@@ -195,6 +221,11 @@ export default function App() {
   const prevLogsMapRef = React.useRef<Map<string, string>>(new Map());
   const isInitialSyncDoneRef = React.useRef<boolean>(false);
 
+  const handleDismissToast = useCallback((id: string) => {
+    setActiveToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+
   // Persist ke localStorage saat data berubah
   useEffect(() => {
     localStorage.setItem('gurulive_tapak_guru_v2', JSON.stringify(masterGuru));
@@ -204,7 +235,10 @@ export default function App() {
     localStorage.setItem('gurulive_tapak_schedules_v2', JSON.stringify(schedules));
     localStorage.setItem('gurulive_tapak_logs_v2', JSON.stringify(attendanceLogs));
     localStorage.setItem('gurulive_tapak_login_v2', JSON.stringify(masterLogin));
-  }, [masterGuru, masterMapel, classes, masterRuangan, schedules, attendanceLogs, masterLogin]);
+    localStorage.setItem('gurulive_tapak_harilibur_v3', JSON.stringify(hariLibur));
+    try { localStorage.removeItem('gurulive_tapak_harilibur_v2'); } catch {}
+    localStorage.setItem('gurulive_tapak_periodeakademik_v2', JSON.stringify(periodeAkademik));
+  }, [masterGuru, masterMapel, classes, masterRuangan, schedules, attendanceLogs, masterLogin, hariLibur, periodeAkademik]);
 
   // Live Clock updater: Menghitung waktu WIB dan jam pelajaran KBM aktif setiap detik secara real-time
   useEffect(() => {
@@ -343,11 +377,22 @@ export default function App() {
           if (bundle.masterLogin && Array.isArray(bundle.masterLogin) && bundle.masterLogin.length > 0) {
             setMasterLogin(bundle.masterLogin);
           }
+
+          // Sinkronkan HariLibur dari spreadsheet (menerima array kosong jika sheet belum diisi)
+          if (bundle.hariLibur !== undefined && Array.isArray(bundle.hariLibur)) {
+            setHariLibur(bundle.hariLibur);
+          }
+
+          // Sinkronkan PeriodeAkademik dari spreadsheet
+          if (bundle.periodeAkademik) {
+            setPeriodeAkademik(bundle.periodeAkademik);
+          }
         }
 
         setIsLiveConnected(true);
         const loginCount = bundle.masterLogin?.length || 0;
-        setSyncMessage(`Sinkronisasi Sheet Sukses: ${bundle.classes.length} Kelas, ${bundle.schedules.length} Jadwal, ${bundle.attendanceLogs.length} Log Presensi, ${loginCount} Akun Admin.`);
+        const holidayCount = bundle.hariLibur?.length || 0;
+        setSyncMessage(`Sinkronisasi Sheet Sukses: ${bundle.classes.length} Kelas, ${bundle.schedules.length} Jadwal, ${bundle.attendanceLogs.length} Log Presensi, ${holidayCount} Hari Libur, ${loginCount} Akun Admin.`);
       } else {
         throw new Error(json.message || 'Format data dari Apps Script tidak sesuai skema TAPAK.');
       }
@@ -428,6 +473,101 @@ export default function App() {
     localStorage.setItem('gurulive_apps_script_url', newUrl);
     fetchFromAppsScript(newUrl);
   };
+
+  // Handler simpan input/edit agenda piket manual ke state lokal dan Google Spreadsheet
+  const handleSavePiketAttendanceLog = useCallback(async (newLog: AttendanceLogItem): Promise<{ success: boolean; message: string }> => {
+    try {
+      // 1. Optimistic Update pada state lokal React (attendanceLogs)
+      setAttendanceLogs(prev => {
+        const canonNewDate = canonicalDateKey(newLog.tanggal);
+        const normNewClass = normalizeClassName(newLog.kelas);
+
+        const existingIdx = prev.findIndex(item => {
+          const cDate = canonicalDateKey(item.tanggal);
+          const cClass = normalizeClassName(item.kelas);
+          if (cDate !== canonNewDate || cClass !== normNewClass) return false;
+
+          // Match jika periode beririsan, atau mapelKe sama, atau kodeGuru sama
+          if (item.periods && newLog.periods && item.periods.length > 0 && newLog.periods.length > 0) {
+            if (item.periods.some(p => newLog.periods?.includes(p))) return true;
+          }
+          if (item.mapelKe && newLog.mapelKe && Number(item.mapelKe) === Number(newLog.mapelKe)) return true;
+          if (item.kodeGuru && newLog.kodeGuru && item.kodeGuru.toLowerCase() === newLog.kodeGuru.toLowerCase()) return true;
+          return false;
+        });
+
+        if (existingIdx >= 0) {
+          const updated = [...prev];
+          updated[existingIdx] = { ...updated[existingIdx], ...newLog };
+          return updated;
+        } else {
+          return [newLog, ...prev];
+        }
+      });
+
+      // 2. Beri visual alert toast presensi masuk/diperbarui
+      const teacher = masterGuru.find(g => g.kodeGuru.toLowerCase() === (newLog.kodeGuru || '').toLowerCase());
+      const subject = masterMapel.find(m => m.kodeMapel.toLowerCase() === (newLog.mataPelajaran || '').toLowerCase());
+      setActiveToasts(prev => [
+        {
+          id: `piket_${Date.now()}`,
+          className: newLog.kelas,
+          teacherName: teacher?.namaLengkap || newLog.namaGuru || `Guru [${newLog.kodeGuru}]`,
+          teacherCode: newLog.kodeGuru,
+          subjectName: subject?.namaMapel || newLog.mataPelajaran,
+          waktuAbsen: newLog.statusKehadiran === 'Hadir' ? 'Agenda Siswa (Hadir)' : `Agenda (${newLog.statusKehadiran})`,
+          statusKehadiran: newLog.statusKehadiran,
+          pengganti: newLog.pengganti,
+          namaPengganti: `Sumber: ${newLog.sumberData || 'Agenda Kelas'}${newLog.penginputData ? ` · Oleh: ${newLog.penginputData}` : ''}`,
+          timestamp: Date.now(),
+        },
+        ...prev.slice(0, 4)
+      ]);
+
+      // 3. Highlight kelas di matriks dashboard
+      if (newLog.kelas) {
+        setRecentlyUpdatedClasses(prev => [newLog.kelas, ...prev.filter(c => c !== newLog.kelas)]);
+        setTimeout(() => setRecentlyUpdatedClasses([]), 6000);
+      }
+
+      // 4. Sinkronisasi ke Google Apps Script Spreadsheet jika URL terkonfigurasi
+      if (appsScriptUrl && appsScriptUrl.trim()) {
+        const sheetPayload = formatLogForSheetPayload(newLog);
+        try {
+          await fetch(appsScriptUrl.trim(), {
+            method: 'POST',
+            mode: 'no-cors', // Menghindari CORS blocking pada Google Apps Script Web App
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              action: 'saveAttendanceLog',
+              log: sheetPayload,
+            }),
+          });
+          return {
+            success: true,
+            message: `Berhasil disimpan ke Agenda Piket & dikirim ke Google Sheets (ID: ${newLog.idKiriman}).`,
+          };
+        } catch (err: any) {
+          return {
+            success: true,
+            message: `Tersimpan di sistem lokal TAPAK (Koneksi Sheets: ${err.message || 'offline'}).`,
+          };
+        }
+      }
+
+      return {
+        success: true,
+        message: `Berhasil dicatat di sistem lokal TAPAK (ID: ${newLog.idKiriman}).`,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: `Gagal menyimpan log: ${err.message || 'Terjadi kesalahan sistem'}`,
+      };
+    }
+  }, [appsScriptUrl, masterGuru, masterMapel]);
 
   // Hitung KPI Berdasarkan Schedules & AttendanceLogs Hari Ini
   const stats = useMemo(() => {
@@ -569,87 +709,98 @@ export default function App() {
         onOpenAdminModal={() => setIsAdminModalOpen(true)}
         adminSession={adminSession}
         onLogout={handleLogout}
+        activePeriodNumber={activePeriodNumber}
+        isWeekend={isWeekend}
+        timeRangeText={activePeriodScheduleInfo ? `${activePeriodScheduleInfo.startTime} - ${activePeriodScheduleInfo.endTime}` : '07:00 - 14:00'}
+        kbmStatusText={isWeekend ? 'Libur Akhir Pekan' : stats.emptyCount === 0 ? 'KBM 100% Lancar' : 'Proses KBM Hari Ini'}
+        kbmStatusColor={isWeekend ? 'text-amber-300 bg-amber-950/60 border-amber-700/60' : 'text-emerald-300 bg-emerald-950/60 border-emerald-700/60'}
       />
+
 
       {/* 2. Main Content Container */}
       <main className={`flex-1 w-full mx-auto ${isFullscreen ? 'p-2' : 'max-w-7xl px-3 sm:px-5 lg:px-6 py-3.5'}`}>
-        {/* Secondary Control Toolbar: Date Selector + Simulator Tool */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-2.5 p-2 px-3 rounded-xl bg-white border border-slate-200">
-          <div className="flex items-center gap-3 flex-wrap">
-            {/* Date selection */}
-            <div className="flex items-center gap-1.5 text-xs text-slate-600">
-              <Calendar className="w-3.5 h-3.5 text-slate-400" />
-              <span className="font-semibold text-slate-700">Tanggal KBM:</span>
-              <select
-                value={selectedDate}
-                onChange={e => setSelectedDate(e.target.value)}
-                className="px-2 py-0.5 text-xs font-semibold bg-slate-50 border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-400 font-mono cursor-pointer"
-              >
-                {availableDates.map(d => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
-              </select>
-            </div>
+        {/* Secondary Control Toolbar: Date Selector + Simulator Tool (Hanya pada Tab Non-Laporan) */}
+        {currentTab !== 'reports' && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-2.5 p-2 px-3 rounded-xl bg-white border border-slate-200">
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Date selection */}
+              <div className="flex items-center gap-1.5 text-xs text-slate-600">
+                <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                <span className="font-semibold text-slate-700">Tanggal KBM:</span>
+                <select
+                  value={selectedDate}
+                  onChange={e => setSelectedDate(e.target.value)}
+                  className="px-2 py-0.5 text-xs font-semibold bg-slate-50 border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-400 font-mono cursor-pointer"
+                >
+                  {availableDates.map(d => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
 
-            {/* Day Type Badge */}
-            <span className={`text-[11px] px-2 py-0.5 rounded-md font-semibold border ${
-              isWeekend 
-                ? 'bg-amber-50 text-amber-800 border-amber-200' 
-                : dayType === 'friday'
-                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                : 'bg-indigo-50 text-indigo-800 border-indigo-200'
-            }`}>
-              {dayNameIndo} · {dayInfo.label}
-            </span>
-
-            {/* Sync Notification Banner */}
-            {syncMessage && (
-              <span className="text-[11px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded flex items-center gap-1">
-                <Info className="w-3 h-3 text-slate-400" />
-                {syncMessage}
+              {/* Day Type Badge */}
+              <span className={`text-[11px] px-2 py-0.5 rounded-md font-semibold border ${
+                isWeekend 
+                  ? 'bg-amber-50 text-amber-800 border-amber-200' 
+                  : dayType === 'friday'
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : 'bg-indigo-50 text-indigo-800 border-indigo-200'
+              }`}>
+                {dayNameIndo} · {dayInfo.label}
               </span>
-            )}
+
+              {/* Sync Notification Banner */}
+              {syncMessage && (
+                <span className="text-[11px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded flex items-center gap-1">
+                  <Info className="w-3 h-3 text-slate-400" />
+                  {syncMessage}
+                </span>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* 3. Infografis Eksekutif KBM Hari Ini (Kepala Sekolah & Guru Piket) */}
-        <ExecutiveInfographic
-          schedules={schedules}
-          attendanceLogs={attendanceLogs}
-          masterGuru={masterGuru}
-          classes={classes}
-          activePeriodNumber={activePeriodNumber}
-          selectedDate={selectedDate}
-          wibTimeStr={wibTimeStr}
-          isWeekend={isWeekend}
-          dayNameIndo={dayNameIndo}
-          periodScheduleInfo={activePeriodScheduleInfo}
-          onToggleUnconfirmed={() => setIsUnconfirmedExpanded(prev => !prev)}
-          onFilterEmpty={() => {
-            setIsUnconfirmedExpanded(true);
-            setCurrentTab('matrix');
-          }}
-          onResetFilter={() => {
-            setActiveFilter('all');
-            setCurrentTab('matrix');
-          }}
-        />
+        {/* 3. Infografis Eksekutif KBM Hari Ini & 4. Kotak Kelas Terkonfirmasi (Khusus Tab Matriks 23 Kelas) */}
+        {currentTab === 'matrix' && (
+          <>
+            <ExecutiveInfographic
+              schedules={schedules}
+              attendanceLogs={attendanceLogs}
+              masterGuru={masterGuru}
+              classes={classes}
+              activePeriodNumber={activePeriodNumber}
+              selectedDate={selectedDate}
+              wibTimeStr={wibTimeStr}
+              isWeekend={isWeekend}
+              dayNameIndo={dayNameIndo}
+              periodScheduleInfo={activePeriodScheduleInfo}
+              onToggleUnconfirmed={() => setIsUnconfirmedExpanded(prev => !prev)}
+              onFilterEmpty={() => {
+                setIsUnconfirmedExpanded(true);
+                setCurrentTab('matrix');
+              }}
+              onResetFilter={() => {
+                setActiveFilter('all');
+                setCurrentTab('matrix');
+              }}
+            />
 
-        {/* 4. Kotak Kelas Belum Terkonfirmasi (Ringkas, Collapsible, Klik untuk Sorot di Matriks) */}
-        <UnconfirmedClassesSection
-          schedules={schedules}
-          attendanceLogs={attendanceLogs}
-          masterGuru={masterGuru}
-          masterMapel={masterMapel}
-          classes={classes}
-          activePeriodNumber={activePeriodNumber}
-          selectedDate={selectedDate}
-          isExpanded={isUnconfirmedExpanded}
-          onToggleExpand={() => setIsUnconfirmedExpanded(prev => !prev)}
-          onSelectClass={handleSelectUnconfirmedClass}
-          selectedGrade={selectedGrade}
-          onSelectGrade={setSelectedGrade}
-        />
+            <UnconfirmedClassesSection
+              schedules={schedules}
+              attendanceLogs={attendanceLogs}
+              masterGuru={masterGuru}
+              masterMapel={masterMapel}
+              classes={classes}
+              activePeriodNumber={activePeriodNumber}
+              selectedDate={selectedDate}
+              isExpanded={isUnconfirmedExpanded}
+              onToggleExpand={() => setIsUnconfirmedExpanded(prev => !prev)}
+              onSelectClass={handleSelectUnconfirmedClass}
+              selectedGrade={selectedGrade}
+              onSelectGrade={setSelectedGrade}
+            />
+          </>
+        )}
 
         {/* 5. Tab Views (Read-Only) */}
         {currentTab === 'matrix' && (
@@ -734,6 +885,20 @@ export default function App() {
           />
         )}
 
+        {currentTab === 'piket' && adminSession && (
+          <AdminPiketAgendaWorkspace
+            schedules={schedules}
+            attendanceLogs={attendanceLogs}
+            classes={classes}
+            masterGuru={masterGuru}
+            masterMapel={masterMapel}
+            selectedDate={selectedDate}
+            adminSession={adminSession}
+            onSaveLog={handleSavePiketAttendanceLog}
+            hariLibur={hariLibur}
+          />
+        )}
+
         {currentTab === 'reports' && (
           <ReportWorkspace
             adminSession={adminSession}
@@ -744,6 +909,8 @@ export default function App() {
             classes={classes}
             masterMapel={masterMapel}
             masterRuangan={masterRuangan}
+            hariLibur={hariLibur}
+            periodeAkademik={periodeAkademik}
             selectedDate={selectedDate}
             wibTimeStr={wibTimeStr}
             onManualRefresh={() => {
@@ -787,16 +954,23 @@ export default function App() {
         attendanceLogs={attendanceLogs}
         masterGuru={masterGuru}
         classes={classes}
+        masterMapel={masterMapel}
         selectedDate={selectedDate}
         wibTimeStr={wibTimeStr}
+        onSavePiketAttendanceLog={handleSavePiketAttendanceLog}
+        onOpenPiketTab={() => {
+          setIsAdminModalOpen(false);
+          setCurrentTab('piket');
+        }}
       />
-
       {/* 8. Sistem Alert Visual (Toast) Presensi Masuk Real-Time */}
       <AttendanceToastContainer
         toasts={activeToasts}
-        onDismiss={id => setActiveToasts(prev => prev.filter(t => t.id !== id))}
+        onDismiss={handleDismissToast}
         onSelectClass={handleSelectUnconfirmedClass}
       />
     </div>
   );
 }
+
+
