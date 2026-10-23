@@ -1,6 +1,6 @@
 {
-  "summary":  "Rencana pembaruan format pesan WhatsApp untuk Laporan Keterlibatan Guru dengan urutan Penuh (A), Nihil (D), Tinggi (B), dan Rendah (C), dilengkapi emoji kuadran dan fallback saat kosong.",
-  "updatedAt":  "2026-10-23T04:16:37.894946032Z",
+  "summary":  "Rencana pembaruan format pratinjau pesan WhatsApp Laporan KBM TAPAK Live mencakup perbaikan tata letak, pengelompokan guru izin/sakit per hari & alasan, serta penambahan emoji indikator status.",
+  "updatedAt":  "2026-10-23T05:12:23.108502921Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

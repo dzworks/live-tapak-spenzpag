@@ -96,7 +96,7 @@ export interface ReportStatsResult {
   filledAppCount: number;
   presencePercent: number;
   appCompliancePercent: number;
-  leaveTeachersList: Array<{ nama: string; status: string; info: string; kelas: string }>;
+  leaveTeachersList: Array<{ nama: string; status: string; info: string; kelas: string; tanggal?: string; hari?: string }>;
   activeDays: number;
   holidayDays: number;
   weekendDays: number;
@@ -234,7 +234,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
       let unconfirmedCount = 0;
       let filledAppCount = 0;
 
-      const leaveTeachersList: Array<{ nama: string; status: string; info: string; kelas: string }> = [];
+      const leaveTeachersList: Array<{ nama: string; status: string; info: string; kelas: string; tanggal?: string; hari?: string }> = [];
 
       dayScheds.forEach(sched => {
         if (isSampleEntity({ kodeGuru: sched.kodeGuru, kodeMapel: sched.kodeMapel })) return;
@@ -261,7 +261,9 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
               nama: teacherName,
               status: matchedLog.statusKehadiran,
               info: matchedLog.infoKetidakhadiran || 'Izin/Sakit',
-              kelas: sched.namaKelas
+              kelas: sched.namaKelas,
+              tanggal: formatDateDMY(reportDate),
+              hari: dayName
             });
           }
         }
@@ -323,7 +325,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
       let totalHolidaySessionsExcluded = 0;
       const holidaysEncountered: HolidayDetailItem[] = [];
       const upcomingDaysEncountered: UpcomingDayItem[] = [];
-      const leaveTeachersList: Array<{ nama: string; status: string; info: string; kelas: string }> = [];
+      const leaveTeachersList: Array<{ nama: string; status: string; info: string; kelas: string; tanggal?: string; hari?: string }> = [];
 
       // Loop setiap hari dari effectiveStart s/d effectiveEnd
       const curIter = new Date(effectiveStart);
@@ -382,7 +384,9 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
                 nama: tObj?.namaLengkap || l.namaGuru || l.kodeGuru,
                 status: l.statusKehadiran,
                 info: l.infoKetidakhadiran || 'Izin Pekan Ini',
-                kelas: l.kelas
+                kelas: l.kelas,
+                tanggal: formatDateDMY(curIter),
+                hari: dayName
               });
             }
           });
@@ -432,7 +436,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
       let presentCount = 0;
       let leaveCount = 0;
       let filledAppCount = 0;
-      const leaveTeachersList: Array<{ nama: string; status: string; info: string; kelas: string }> = [];
+      const leaveTeachersList: Array<{ nama: string; status: string; info: string; kelas: string; tanggal?: string; hari?: string }> = [];
 
       attendanceLogs.forEach(l => {
         if (isSampleEntity({ kodeGuru: l.kodeGuru, namaGuru: l.namaGuru })) return;
@@ -450,7 +454,9 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
               nama: tObj?.namaLengkap || l.namaGuru || l.kodeGuru,
               status: l.statusKehadiran,
               info: l.infoKetidakhadiran || 'Rekap Perizinan',
-              kelas: l.kelas
+              kelas: l.kelas,
+              tanggal: l.tanggal,
+              hari: getDayNameIndonesian(l.tanggal)
             });
           }
         }
@@ -502,7 +508,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
     let presentCount = 0;
     let leaveCount = 0;
     let filledAppCount = 0;
-    const leaveTeachersList: Array<{ nama: string; status: string; info: string; kelas: string }> = [];
+    const leaveTeachersList: Array<{ nama: string; status: string; info: string; kelas: string; tanggal?: string; hari?: string }> = [];
 
     attendanceLogs.forEach(l => {
       if (isSampleEntity({ kodeGuru: l.kodeGuru, namaGuru: l.namaGuru })) return;
@@ -522,7 +528,9 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
             nama: tObj?.namaLengkap || l.namaGuru || l.kodeGuru,
             status: l.statusKehadiran,
             info: l.infoKetidakhadiran || 'Rekap Semesteran',
-            kelas: l.kelas
+            kelas: l.kelas,
+            tanggal: l.tanggal,
+            hari: getDayNameIndonesian(l.tanggal)
           });
         }
       }
@@ -864,10 +872,69 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
 
   // Format teks rapi untuk WhatsApp
   const waMessageText = useMemo(() => {
+    // Helper indicator status emoji
+    const getStatusEmoji = (status: string, info: string = '') => {
+      const s = (status || '').toLowerCase();
+      const i = (info || '').toLowerCase();
+      if (s.includes('sakit') || i.includes('sakit')) return '🏥';
+      if (s.includes('dinas') || i.includes('dinas')) return '💼';
+      if (s.includes('izin') || i.includes('izin') || i.includes('keperluan')) return '📝';
+      return '⚠️';
+    };
+
+    // Kelompokkan catatan guru izin/sakit berdasarkan Guru + Status + Alasan + Hari
+    const groupedLeavesMap = new Map<string, {
+      nama: string;
+      status: string;
+      info: string;
+      hari?: string;
+      tanggal?: string;
+      kelases: string[];
+    }>();
+
+    reportStats.leaveTeachersList.forEach(item => {
+      const dayKey = item.hari || item.tanggal || '';
+      const groupKey = `${item.nama}||${item.status}||${item.info}||${dayKey}`;
+      if (!groupedLeavesMap.has(groupKey)) {
+        groupedLeavesMap.set(groupKey, {
+          nama: item.nama,
+          status: item.status,
+          info: item.info,
+          hari: item.hari,
+          tanggal: item.tanggal,
+          kelases: []
+        });
+      }
+      const entry = groupedLeavesMap.get(groupKey)!;
+      if (item.kelas && !entry.kelases.includes(item.kelas)) {
+        entry.kelases.push(item.kelas);
+      }
+    });
+
+    const groupedLeaveLines = Array.from(groupedLeavesMap.values()).map(entry => {
+      const emoji = getStatusEmoji(entry.status, entry.info);
+      const classesStr = entry.kelases.join(', ');
+      
+      let reason = entry.info;
+      if (!reason || reason === 'Izin/Sakit' || reason === 'Izin Pekan Ini' || reason === 'Rekap Perizinan' || reason === 'Rekap Semesteran') {
+        reason = entry.status;
+      } else if (!reason.toLowerCase().includes(entry.status.toLowerCase())) {
+        reason = `${entry.status}: ${reason}`;
+      }
+
+      const dayPrefix = entry.hari ? `${entry.hari}, ` : (entry.tanggal ? `${entry.tanggal}, ` : '');
+
+      return `- ${emoji} ${entry.nama} (${dayPrefix}${classesStr} · ${reason})`;
+    });
+
+    const leaveTeachersFormatted = groupedLeaveLines.length > 0 
+      ? groupedLeaveLines.join('\n')
+      : '- Nihil (Seluruh guru KBM mengajar penuh)';
+
     return `📊 *LAPORAN REKAPITULASI KBM TAPAK LIVE*
 🗓 *Periode*: ${reportStats.titlePeriod}
 🎓 *Periode Akademik*: ${periodeAkademik.mulaiSemester} s/d ${periodeAkademik.akhirSemester} (${periodeAkademik.tahunAjaran || '2026/2027 Ganjil'})
-📅 *Hari Efektif KBM*: ${reportStats.activeDays} Hari Aktif (Dipotong ${reportStats.weekendDays} Akhir Pekan & ${reportStats.holidayDays} Libur Nasional)
+📅 *Hari Efektif KBM*: ${reportStats.activeDays} Hari Aktif (${reportStats.holidayDays} Libur/ KBM non efektif)
 ----------------------------------------
 ✅ *Sesi Hadir/Mengajar*: ${reportStats.presentCount} Sesi (${reportStats.presencePercent}%)
 📱 *% Keterlibatan Guru (Input Mandiri)*: ${reportStats.filledAppCount} / ${reportStats.totalSessions} Sesi (${reportStats.appCompliancePercent}%)
@@ -875,12 +942,10 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
 🔴 *Belum Diisi Absensi*: ${reportStats.unconfirmedCount} Sesi
 ----------------------------------------
 📋 *CATATAN GURU IZIN/SAKIT*:
-${reportStats.leaveTeachersList.length > 0 
-  ? reportStats.leaveTeachersList.slice(0, 10).map(t => `- ${t.nama} (${t.kelas} · ${t.status}: ${t.info})`).join('\n')
-  : '- Nihil (Seluruh guru KBM mengajar penuh)'}
+${leaveTeachersFormatted}
 ----------------------------------------
 _Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
-  }, [reportStats, periodeAkademik]);
+  }, [reportStats, periodeAkademik, periodMode]);
 
   // Format teks WhatsApp Keterlibatan
   const waMessageKeterlibatanText = useMemo(() => {
