@@ -870,19 +870,48 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
     });
   }, [keterlibatanData.list, keterlibatanFilterGroup, keterlibatanSearch]);
 
-  // Format teks rapi untuk WhatsApp
+  // Format teks rapi untuk WhatsApp KBM
   const waMessageText = useMemo(() => {
-    // Helper indicator status emoji
-    const getStatusEmoji = (status: string, info: string = '') => {
-      const s = (status || '').toLowerCase();
-      const i = (info || '').toLowerCase();
-      if (s.includes('sakit') || i.includes('sakit')) return '🏥';
-      if (s.includes('dinas') || i.includes('dinas')) return '💼';
-      if (s.includes('izin') || i.includes('izin') || i.includes('keperluan')) return '📝';
-      return '⚠️';
+    // 1. Data Kualitas Data & Total Masuk
+    const totalDataMasukCount = (reportStats.presentCount + reportStats.leaveCount) > 0 
+      ? (reportStats.presentCount + reportStats.leaveCount) 
+      : reportStats.filledAppCount;
+    const dataMasukPercent = reportStats.totalSessions > 0 
+      ? Math.round((totalDataMasukCount / reportStats.totalSessions) * 100) 
+      : 0;
+
+    const getDataQualityStatus = (percent: number) => {
+      if (percent >= 90) return '🟢 Sangat Baik';
+      if (percent >= 75) return '🔵 Baik';
+      if (percent >= 50) return '🟠 Cukup';
+      return '🔴 Perlu Perhatian';
     };
 
-    // Kelompokkan catatan guru izin/sakit berdasarkan Guru + Status + Alasan + Hari
+    const leavePercent = reportStats.totalSessions > 0 
+      ? Math.round((reportStats.leaveCount / reportStats.totalSessions) * 100) 
+      : 0;
+
+    // 2. Helper urutan hari
+    const dayOrderMap: Record<string, number> = {
+      'senin': 1,
+      'selasa': 2,
+      'rabu': 3,
+      'kamis': 4,
+      'jumat': 5,
+      'sabtu': 6,
+      'minggu': 7,
+    };
+
+    const getDayOrder = (dayName?: string) => {
+      if (!dayName) return 99;
+      const lower = dayName.toLowerCase().trim();
+      for (const [d, order] of Object.entries(dayOrderMap)) {
+        if (lower.includes(d)) return order;
+      }
+      return 99;
+    };
+
+    // 3. Kelompokkan catatan guru izin/sakit berdasarkan Guru + Status + Alasan + Hari
     const groupedLeavesMap = new Map<string, {
       nama: string;
       status: string;
@@ -911,8 +940,16 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
       }
     });
 
-    const groupedLeaveLines = Array.from(groupedLeavesMap.values()).map(entry => {
-      const emoji = getStatusEmoji(entry.status, entry.info);
+    // 4. Urutkan berdasarkan hari (Senin s/d Minggu)
+    const sortedEntries = Array.from(groupedLeavesMap.values()).sort((a, b) => {
+      const orderA = getDayOrder(a.hari);
+      const orderB = getDayOrder(b.hari);
+      if (orderA !== orderB) return orderA - orderB;
+      return a.nama.localeCompare(b.nama);
+    });
+
+    // 5. Format baris guru izin (tanpa emoji, indentasi 3 spasi pada baris kedua agar sejajar dengan huruf pertama)
+    const groupedLeaveLines = sortedEntries.map(entry => {
       const classesStr = entry.kelases.join(', ');
       
       let reason = entry.info;
@@ -922,30 +959,40 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
         reason = `${entry.status}: ${reason}`;
       }
 
-      const dayPrefix = entry.hari ? `${entry.hari}, ` : (entry.tanggal ? `${entry.tanggal}, ` : '');
+      const dayStr = entry.hari ? `${entry.hari}, ` : (entry.tanggal ? `${entry.tanggal}, ` : '');
 
-      return `- ${emoji} ${entry.nama} (${dayPrefix}${classesStr} · ${reason})`;
+      return `-  ${entry.nama}\n   (${dayStr}${classesStr} · ${reason})`;
     });
 
     const leaveTeachersFormatted = groupedLeaveLines.length > 0 
       ? groupedLeaveLines.join('\n')
-      : '- Nihil (Seluruh guru KBM mengajar penuh)';
+      : '-  Nihil (Seluruh guru KBM mengajar penuh)';
+
+    const now = new Date();
+    const dateStr = formatDateDMY(now);
+    const timeStr = wibTimeStr ? `${wibTimeStr} WIB` : `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} WIB`;
+    const fullTimestamp = `${dateStr}, ${timeStr}`;
 
     return `📊 *LAPORAN REKAPITULASI KBM TAPAK LIVE*
 🗓 *Periode*: ${reportStats.titlePeriod}
-🎓 *Periode Akademik*: ${periodeAkademik.mulaiSemester} s/d ${periodeAkademik.akhirSemester} (${periodeAkademik.tahunAjaran || '2026/2027 Ganjil'})
+🎓 *Periode Akademik*: ${periodeAkademik.tahunAjaran || '2026/2027 Ganjil'}
 📅 *Hari Efektif KBM*: ${reportStats.activeDays} Hari Aktif (${reportStats.holidayDays} Libur/ KBM non efektif)
 ----------------------------------------
-✅ *Sesi Hadir/Mengajar*: ${reportStats.presentCount} Sesi (${reportStats.presencePercent}%)
-📱 *% Keterlibatan Guru (Input Mandiri)*: ${reportStats.filledAppCount} / ${reportStats.totalSessions} Sesi (${reportStats.appCompliancePercent}%)
-⚠️ *Guru Izin / Sakit / Dinas*: ${reportStats.leaveCount} Sesi
-🔴 *Belum Diisi Absensi*: ${reportStats.unconfirmedCount} Sesi
+*% Data yang masuk aplikasi:*
+${dataMasukPercent}% (${totalDataMasukCount} / ${reportStats.totalSessions} Sesi)
+Status Kualitas Data: ${getDataQualityStatus(dataMasukPercent)}
+----------------------------------------
+*Total Sesi*: ${reportStats.totalSessions} Sesi
+*Sesi Guru Hadir/Mengajar*: 
+${reportStats.presencePercent}% / ${reportStats.presentCount} Sesi 
+*Guru Izin / Sakit / Dinas*: 
+${leavePercent}% / ${reportStats.leaveCount} Sesi
 ----------------------------------------
 📋 *CATATAN GURU IZIN/SAKIT*:
 ${leaveTeachersFormatted}
 ----------------------------------------
-_Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
-  }, [reportStats, periodeAkademik, periodMode]);
+_Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring pada ${fullTimestamp}_`;
+  }, [reportStats, periodeAkademik, wibTimeStr]);
 
   // Format teks WhatsApp Keterlibatan
   const waMessageKeterlibatanText = useMemo(() => {
@@ -955,39 +1002,48 @@ _Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
     const groupBList = list.filter(i => i.group === 'B');
     const groupCList = list.filter(i => i.group === 'C');
 
-    const renderGroupList = (items: typeof list) => 
-      items.length > 0
-        ? items.map(t => `- ${t.namaLengkap} (${t.inputMandiriSesi}/${t.totalSesi} Sesi · ${t.percentage}%)`).join('\n')
-        : '- Nihil';
+    const renderGroupList = (items: typeof list) => {
+      if (items.length === 0) return '- Nihil';
+      return items.map((t, idx) => {
+        const numPrefix = `${idx + 1} `;
+        const padSpaces = ' '.repeat(numPrefix.length);
+        return `${numPrefix}${t.namaLengkap}\n${padSpaces}(${t.inputMandiriSesi}/${t.totalSesi} Sesi · ${t.percentage}%)`;
+      }).join('\n');
+    };
+
+    const now = new Date();
+    const dateStr = formatDateDMY(now);
+    const timeStr = wibTimeStr ? `${wibTimeStr} WIB` : `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} WIB`;
+    const fullTimestamp = `${dateStr}, ${timeStr}`;
 
     return `🏆 *LAPORAN REKAPITULASI KETERLIBATAN GURU*
 🗓 *Periode*: ${reportStats.titlePeriod}
 📊 *Evaluasi Guru Terjadwal*: ${keterlibatanData.totalTeachersEvaluated} Guru
 ----------------------------------------
-📈 Persentase keterlibatan guru: ${reportStats.appCompliancePercent}%
+📈 % Keterlibatan guru: *${reportStats.appCompliancePercent}%*
 📊 Total Sesi: ${reportStats.totalSessions} Sesi
 📱 Guru mengisi aplikasi: ${reportStats.filledAppCount} Sesi
 🔴 Guru belum isi aplikasi: ${reportStats.unconfirmedCount} Sesi
 ----------------------------------------
-🟢 *Kelompok A (Keterlibatan Penuh 100%)*: ${keterlibatanData.groupACount} Guru
-🔵 *Kelompok B (Keterlibatan Tinggi 60-99%)*: ${keterlibatanData.groupBCount} Guru
-🟠 *Kelompok C (Keterlibatan Rendah <60%)*: ${keterlibatanData.groupCCount} Guru
-🔴 *Kelompok D (Nihil Laporan 0%)*: ${keterlibatanData.groupDCount} Guru
+🟢 *A. Keterlibatan Penuh 100%*: ${keterlibatanData.groupACount} Guru
+🔵 *B. Keterlibatan Tinggi 60-99%*: ${keterlibatanData.groupBCount} Guru
+🟠 *C. Keterlibatan Rendah <60%*: ${keterlibatanData.groupCCount} Guru
+🔴 *D. Nihil Laporan 0%*: ${keterlibatanData.groupDCount} Guru
 ----------------------------------------
-🟢 *GURU KETERLIBATAN PENUH*:
+🟢 *GURU KETERLIBATAN PENUH* (${groupAList.length} Guru):
 ${renderGroupList(groupAList)}
 ----------------------------------------
-🔴 *DAFTAR GURU NIHIL LAPORAN*:
+🔴 *DAFTAR GURU NIHIL LAPORAN* (${groupDList.length} Guru):
 ${renderGroupList(groupDList)}
 ----------------------------------------
-🔵 *GURU KETERLIBATAN TINGGI*:
+🔵 *GURU KETERLIBATAN TINGGI* (${groupBList.length} Guru):
 ${renderGroupList(groupBList)}
 ----------------------------------------
-🟠 *GURU KETERLIBATAN RENDAH*:
+🟠 *GURU KETERLIBATAN RENDAH* (${groupCList.length} Guru):
 ${renderGroupList(groupCList)}
 ----------------------------------------
-_Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
-  }, [keterlibatanData, reportStats]);
+_Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring pada ${fullTimestamp}_`;
+  }, [keterlibatanData, reportStats, wibTimeStr]);
 
   const activeWaText = activeReportSubTab === 'keterlibatan' ? waMessageKeterlibatanText : waMessageText;
 
