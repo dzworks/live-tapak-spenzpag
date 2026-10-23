@@ -17,7 +17,15 @@ import {
   ChevronDown,
   ChevronUp,
   CalendarDays,
-  Palmtree
+  Palmtree,
+  Search,
+  Filter,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  UserCheck,
+  Users,
+  Sparkles
 } from 'lucide-react';
 import { 
   ScheduleItem, 
@@ -193,6 +201,11 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
   const [hoveredBarIndex, setHoveredBarIndex] = useState<number | null>(null);
   const [isHolidaysExpanded, setIsHolidaysExpanded] = useState<boolean>(false);
 
+  // Sub-Tab Navigation & Filter Keterlibatan
+  const [activeReportSubTab, setActiveReportSubTab] = useState<'kbm' | 'keterlibatan'>('kbm');
+  const [keterlibatanSearch, setKeterlibatanSearch] = useState<string>('');
+  const [keterlibatanFilterGroup, setKeterlibatanFilterGroup] = useState<'all' | 'A' | 'B' | 'C' | 'D'>('all');
+
   // Kamus guru O(1)
   const teachersMap = useMemo(() => {
     const map: Record<string, MasterGuru> = {};
@@ -235,7 +248,9 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
         if (!matchedLog) {
           unconfirmedCount++;
         } else {
-          filledAppCount++;
+          if (matchedLog.sumberData && matchedLog.sumberData.toLowerCase().includes('input mandiri')) {
+            filledAppCount++;
+          }
           if (matchedLog.statusKehadiran === 'Hadir' || matchedLog.pengganti === 'Y') {
             presentCount++;
           } else {
@@ -355,7 +370,9 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
           const dLogs = attendanceLogs.filter(l => canonicalDateKey(l.tanggal) === dKey);
           dLogs.forEach(l => {
             if (isSampleEntity({ kodeGuru: l.kodeGuru, namaGuru: l.namaGuru })) return;
-            filledAppCount++;
+            if (l.sumberData && l.sumberData.toLowerCase().includes('input mandiri')) {
+              filledAppCount++;
+            }
             if (l.statusKehadiran === 'Hadir' || l.pengganti === 'Y') {
               presentCount++;
             } else {
@@ -493,7 +510,9 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
       if (!lDate) return;
 
       if (lDate >= effectiveStart && lDate <= cutOffDate && !isWeekend(lDate) && !isHolidayDate(lDate, hariLibur).isHoliday) {
-        filledAppCount++;
+        if (l.sumberData && l.sumberData.toLowerCase().includes('input mandiri')) {
+          filledAppCount++;
+        }
         if (l.statusKehadiran === 'Hadir' || l.pengganti === 'Y') {
           presentCount++;
         } else {
@@ -570,7 +589,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
 
         const pLogs = dayLogs.filter(l => (l.mapelKe === p || l.startPeriod === p) && !isSampleEntity({ kodeGuru: l.kodeGuru }));
         const present = pLogs.filter(l => l.statusKehadiran === 'Hadir' || l.pengganti === 'Y').length;
-        const filled = pLogs.length;
+        const filled = pLogs.filter(l => l.sumberData && l.sumberData.toLowerCase().includes('input mandiri')).length;
 
         const presencePercent = total > 0 ? Math.round((present / total) * 100) : (isRefWeekend || isHol ? 0 : (filled > 0 ? 100 : 0));
         const appCompliancePercent = total > 0 ? Math.round((filled / total) * 100) : (isRefWeekend || isHol ? 0 : (filled > 0 ? 100 : 0));
@@ -629,7 +648,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
           ? [] 
           : attendanceLogs.filter(l => canonicalDateKey(l.tanggal) === curKey && !isSampleEntity({ kodeGuru: l.kodeGuru }));
         const present = dLogs.filter(l => l.statusKehadiran === 'Hadir' || l.pengganti === 'Y').length;
-        const filled = dLogs.length;
+        const filled = dLogs.filter(l => l.sumberData && l.sumberData.toLowerCase().includes('input mandiri')).length;
 
         const presencePercent = total > 0 ? Math.round((present / total) * 100) : 0;
         const appCompliancePercent = total > 0 ? Math.round((filled / total) * 100) : 0;
@@ -676,6 +695,173 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
     });
   }, [periodMode, reportDate, weeklyStartDate, weeklyEndDate, schedules, attendanceLogs, reportStats, hariLibur]);
 
+  // Evaluasi Kuadran Keterlibatan Guru (Pengelompokan Kelompok A, B, C, D)
+  const keterlibatanData = useMemo(() => {
+    const activeTeachers = masterGuru.filter(
+      g => !isSampleEntity({ kodeGuru: g.kodeGuru, namaGuru: g.namaLengkap })
+    );
+
+    const parsedRefDate = parseDateDMY(reportDate) || new Date(2026, 9, 16);
+    const dayName = getDayNameIndonesian(reportDate);
+
+    let periodSchedules: ScheduleItem[] = [];
+    let periodLogs: AttendanceLogItem[] = [];
+
+    if (periodMode === 'daily') {
+      const isRefWeekend = isWeekend(parsedRefDate);
+      const isHol = isHolidayDate(parsedRefDate, hariLibur).isHoliday;
+      if (!isRefWeekend && !isHol) {
+        periodSchedules = schedules.filter(
+          s => s.hari.toLowerCase() === dayName.toLowerCase() && !isSampleEntity({ kodeGuru: s.kodeGuru, kodeMapel: s.kodeMapel })
+        );
+        periodLogs = attendanceLogs.filter(l => isSameDate(l.tanggal, reportDate) && !isSampleEntity({ kodeGuru: l.kodeGuru }));
+      }
+    } else if (periodMode === 'weekly') {
+      const parsedStart = parseDateDMY(weeklyStartDate) || new Date(2026, 9, 12);
+      const parsedEnd = parseDateDMY(weeklyEndDate) || new Date(2026, 9, 16);
+      const effectiveStart = parsedStart <= parsedEnd ? parsedStart : parsedEnd;
+      const effectiveEnd = parsedStart <= parsedEnd ? parsedEnd : parsedStart;
+      const cutOffDate = parsedRefDate;
+
+      const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+      const cur = new Date(effectiveStart);
+
+      while (cur <= effectiveEnd) {
+        if (!isWeekend(cur)) {
+          const curKey = canonicalDateKey(cur);
+          const holCheck = isHolidayDate(cur, hariLibur);
+          if (!holCheck.isHoliday && cur <= cutOffDate) {
+            const dName = dayNames[cur.getDay()];
+            const dScheds = schedules.filter(
+              s => s.hari.toLowerCase() === dName.toLowerCase() && !isSampleEntity({ kodeGuru: s.kodeGuru, kodeMapel: s.kodeMapel })
+            );
+            periodSchedules.push(...dScheds);
+
+            const dLogs = attendanceLogs.filter(l => canonicalDateKey(l.tanggal) === curKey && !isSampleEntity({ kodeGuru: l.kodeGuru }));
+            periodLogs.push(...dLogs);
+          }
+        }
+        cur.setDate(cur.getDate() + 1);
+      }
+    } else {
+      const startDateSemester = parseDateDMY(periodeAkademik.mulaiSemester) || new Date(2026, 5, 1);
+      const endDateSemester = parseDateDMY(periodeAkademik.akhirSemester || periodeAkademik.selesaiSemester) || new Date(2026, 11, 20);
+      const cutOffDate = parsedRefDate < endDateSemester ? parsedRefDate : endDateSemester;
+      const effectiveStart = startDateSemester <= cutOffDate ? startDateSemester : cutOffDate;
+
+      periodSchedules = schedules.filter(s => !isSampleEntity({ kodeGuru: s.kodeGuru, kodeMapel: s.kodeMapel }));
+
+      attendanceLogs.forEach(l => {
+        if (isSampleEntity({ kodeGuru: l.kodeGuru, namaGuru: l.namaGuru })) return;
+        const lDate = parseDateDMY(l.tanggal);
+        if (!lDate) return;
+        if (lDate >= effectiveStart && lDate <= cutOffDate && !isWeekend(lDate) && !isHolidayDate(lDate, hariLibur).isHoliday) {
+          periodLogs.push(l);
+        }
+      });
+    }
+
+    const list: Array<{
+      kodeGuru: string;
+      namaLengkap: string;
+      nip: string;
+      totalSesi: number;
+      inputMandiriSesi: number;
+      percentage: number;
+      group: 'A' | 'B' | 'C' | 'D';
+      groupName: string;
+      badgeBg: string;
+      badgeText: string;
+      badgeBorder: string;
+    }> = [];
+
+    activeTeachers.forEach(guru => {
+      const kGuru = guru.kodeGuru;
+      const guruSchedules = periodSchedules.filter(s => s.kodeGuru === kGuru);
+      const totalSesi = guruSchedules.length;
+
+      // Keputusan Dikonfirmasi: Hanya kelompokkan guru yang memiliki jadwal mengajar pada periode tersebut
+      if (totalSesi === 0) return;
+
+      const guruLogs = periodLogs.filter(l => l.kodeGuru === kGuru && l.sumberData && l.sumberData.toLowerCase().includes('input mandiri'));
+      const inputMandiriSesi = guruLogs.length;
+
+      const percentage = Math.round((inputMandiriSesi / totalSesi) * 100);
+
+      let group: 'A' | 'B' | 'C' | 'D' = 'D';
+      let groupName = 'Kelompok D (Nihil Laporan)';
+      let badgeBg = 'bg-rose-100 text-rose-900 border-rose-300';
+      let badgeText = 'text-rose-800';
+      let badgeBorder = 'border-rose-200';
+
+      if (percentage === 100) {
+        group = 'A';
+        groupName = 'Kelompok A (Keterlibatan Penuh 100%)';
+        badgeBg = 'bg-emerald-100 text-emerald-900 border-emerald-300';
+        badgeText = 'text-emerald-800';
+        badgeBorder = 'border-emerald-200';
+      } else if (percentage >= 60) {
+        group = 'B';
+        groupName = 'Kelompok B (Keterlibatan Tinggi 60-99%)';
+        badgeBg = 'bg-indigo-100 text-indigo-900 border-indigo-300';
+        badgeText = 'text-indigo-800';
+        badgeBorder = 'border-indigo-200';
+      } else if (percentage > 0) {
+        group = 'C';
+        groupName = 'Kelompok C (Keterlibatan Rendah <60%)';
+        badgeBg = 'bg-amber-100 text-amber-900 border-amber-300';
+        badgeText = 'text-amber-800';
+        badgeBorder = 'border-amber-200';
+      }
+
+      list.push({
+        kodeGuru: kGuru,
+        namaLengkap: guru.namaLengkap || kGuru,
+        nip: guru.nip || '-',
+        totalSesi,
+        inputMandiriSesi,
+        percentage,
+        group,
+        groupName,
+        badgeBg,
+        badgeText,
+        badgeBorder,
+      });
+    });
+
+    list.sort((a, b) => b.percentage - a.percentage || a.namaLengkap.localeCompare(b.namaLengkap));
+
+    const groupACount = list.filter(item => item.group === 'A').length;
+    const groupBCount = list.filter(item => item.group === 'B').length;
+    const groupCCount = list.filter(item => item.group === 'C').length;
+    const groupDCount = list.filter(item => item.group === 'D').length;
+
+    return {
+      list,
+      groupACount,
+      groupBCount,
+      groupCCount,
+      groupDCount,
+      totalTeachersEvaluated: list.length,
+    };
+  }, [masterGuru, schedules, attendanceLogs, reportDate, weeklyStartDate, weeklyEndDate, periodMode, hariLibur, periodeAkademik]);
+
+  // List terfilter berdasarkan pencarian & filter kelompok kuadran
+  const filteredKeterlibatanList = useMemo(() => {
+    return keterlibatanData.list.filter(item => {
+      if (keterlibatanFilterGroup !== 'all' && item.group !== keterlibatanFilterGroup) return false;
+      if (keterlibatanSearch.trim()) {
+        const q = keterlibatanSearch.toLowerCase().trim();
+        return (
+          item.namaLengkap.toLowerCase().includes(q) ||
+          item.kodeGuru.toLowerCase().includes(q) ||
+          item.nip.toLowerCase().includes(q)
+        );
+      }
+      return true;
+    });
+  }, [keterlibatanData.list, keterlibatanFilterGroup, keterlibatanSearch]);
+
   // Format teks rapi untuk WhatsApp
   const waMessageText = useMemo(() => {
     return `📊 *LAPORAN REKAPITULASI KBM TAPAK LIVE*
@@ -684,7 +870,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
 📅 *Hari Efektif KBM*: ${reportStats.activeDays} Hari Aktif (Dipotong ${reportStats.weekendDays} Akhir Pekan & ${reportStats.holidayDays} Libur Nasional)
 ----------------------------------------
 ✅ *Sesi Hadir/Mengajar*: ${reportStats.presentCount} Sesi (${reportStats.presencePercent}%)
-📱 *Kepatuhan Mengisi Aplikasi*: ${reportStats.filledAppCount} / ${reportStats.totalSessions} Sesi (${reportStats.appCompliancePercent}%)
+📱 *% Keterlibatan Guru (Input Mandiri)*: ${reportStats.filledAppCount} / ${reportStats.totalSessions} Sesi (${reportStats.appCompliancePercent}%)
 ⚠️ *Guru Izin / Sakit / Dinas*: ${reportStats.leaveCount} Sesi
 🔴 *Belum Diisi Absensi*: ${reportStats.unconfirmedCount} Sesi
 ----------------------------------------
@@ -696,16 +882,55 @@ ${reportStats.leaveTeachersList.length > 0
 _Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
   }, [reportStats, periodeAkademik]);
 
+  // Format teks WhatsApp Keterlibatan
+  const waMessageKeterlibatanText = useMemo(() => {
+    const list = keterlibatanData.list;
+    const groupAList = list.filter(i => i.group === 'A');
+    const groupDList = list.filter(i => i.group === 'D');
+    const groupBList = list.filter(i => i.group === 'B');
+    const groupCList = list.filter(i => i.group === 'C');
+
+    const renderGroupList = (items: typeof list) => 
+      items.length > 0
+        ? items.map(t => `- ${t.namaLengkap} (${t.inputMandiriSesi}/${t.totalSesi} Sesi · ${t.percentage}%)`).join('\n')
+        : '- Nihil';
+
+    return `🏆 *LAPORAN REKAPITULASI KETERLIBATAN GURU*
+🗓 *Periode*: ${reportStats.titlePeriod}
+📊 *Evaluasi Guru Terjadwal*: ${keterlibatanData.totalTeachersEvaluated} Guru
+----------------------------------------
+🟢 *Kelompok A (Keterlibatan Penuh 100%)*: ${keterlibatanData.groupACount} Guru
+🔵 *Kelompok B (Keterlibatan Tinggi 60-99%)*: ${keterlibatanData.groupBCount} Guru
+🟠 *Kelompok C (Keterlibatan Rendah <60%)*: ${keterlibatanData.groupCCount} Guru
+🔴 *Kelompok D (Nihil Laporan 0%)*: ${keterlibatanData.groupDCount} Guru
+----------------------------------------
+🟢 *GURU KETERLIBATAN PENUH*:
+${renderGroupList(groupAList)}
+----------------------------------------
+🔴 *DAFTAR GURU NIHIL LAPORAN*:
+${renderGroupList(groupDList)}
+----------------------------------------
+🔵 *GURU KETERLIBATAN TINGGI*:
+${renderGroupList(groupBList)}
+----------------------------------------
+🟠 *GURU KETERLIBATAN RENDAH*:
+${renderGroupList(groupCList)}
+----------------------------------------
+_Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
+  }, [keterlibatanData, reportStats]);
+
+  const activeWaText = activeReportSubTab === 'keterlibatan' ? waMessageKeterlibatanText : waMessageText;
+
   // Salin teks WhatsApp
   const handleCopyWaText = () => {
-    navigator.clipboard.writeText(waMessageText);
+    navigator.clipboard.writeText(activeWaText);
     setCopiedWaText(true);
-    setTimeout(() => setCopiedWaText(false), 2500);
+    setTimeout(() => setCopiedWaText(false), 2000);
   };
 
   // Kirim langsung ke WhatsApp
   const handleSendToWhatsApp = () => {
-    const encoded = encodeURIComponent(waMessageText);
+    const encoded = encodeURIComponent(activeWaText);
     window.open(`https://wa.me/?text=${encoded}`, '_blank');
   };
 
@@ -745,7 +970,9 @@ _Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
       <div className="hidden print:block print:fixed print:inset-0 print:bg-white print:p-8 print:z-[9999] text-slate-900 font-sans">
         <div className="border-b-2 border-slate-900 pb-4 mb-4 text-center">
           <h1 className="text-xl font-bold uppercase tracking-wider text-slate-800">PEMERINTAH KABUPATEN / DINAS PENDIDIKAN</h1>
-          <h2 className="text-2xl font-black uppercase text-indigo-950">LAPORAN MONITORING PRESENSI KBM GURU</h2>
+          <h2 className="text-2xl font-black uppercase text-indigo-950">
+            {activeReportSubTab === 'keterlibatan' ? 'LAPORAN REKAPITULASI KETERLIBATAN GURU (KUADRAN ABSENSI MANDIRI)' : 'LAPORAN MONITORING PRESENSI KBM GURU'}
+          </h2>
           <p className="text-xs font-mono text-slate-600 mt-1">
             Sistem Informasi TAPAK Live Monitoring · Periode: {reportStats.titlePeriod}
           </p>
@@ -754,60 +981,117 @@ _Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
           </p>
         </div>
 
-        {/* Ringkasan Statistik Cetak */}
-        <div className="grid grid-cols-5 gap-3 mb-6 border border-slate-300 p-4 rounded-lg bg-slate-50 text-center">
-          <div>
-            <div className="text-[9px] text-slate-500 uppercase font-bold">Total Sesi KBM</div>
-            <div className="text-base font-bold font-mono">{reportStats.totalSessions} Sesi</div>
-          </div>
-          <div>
-            <div className="text-[9px] text-slate-500 uppercase font-bold">Sesi Hadir</div>
-            <div className="text-base font-bold font-mono text-emerald-700">{reportStats.presentCount} ({reportStats.presencePercent}%)</div>
-          </div>
-          <div>
-            <div className="text-[9px] text-slate-500 uppercase font-bold">Kepatuhan Aplikasi</div>
-            <div className="text-base font-bold font-mono text-indigo-700">{reportStats.appCompliancePercent}%</div>
-          </div>
-          <div>
-            <div className="text-[9px] text-slate-500 uppercase font-bold">Izin / Sakit</div>
-            <div className="text-base font-bold font-mono text-amber-700">{reportStats.leaveCount} Sesi</div>
-          </div>
-          <div>
-            <div className="text-[9px] text-slate-500 uppercase font-bold">Belum Absen</div>
-            <div className="text-base font-bold font-mono text-rose-700">{reportStats.unconfirmedCount} Sesi</div>
-          </div>
-        </div>
+        {activeReportSubTab === 'keterlibatan' ? (
+          <>
+            {/* Ringkasan Kuadran Cetak */}
+            <div className="grid grid-cols-4 gap-3 mb-6 border border-slate-300 p-4 rounded-lg bg-slate-50 text-center">
+              <div>
+                <div className="text-[9px] text-emerald-800 uppercase font-bold">Kelompok A (100%)</div>
+                <div className="text-base font-bold font-mono text-emerald-700">{keterlibatanData.groupACount} Guru</div>
+              </div>
+              <div>
+                <div className="text-[9px] text-indigo-800 uppercase font-bold">Kelompok B (60-99%)</div>
+                <div className="text-base font-bold font-mono text-indigo-700">{keterlibatanData.groupBCount} Guru</div>
+              </div>
+              <div>
+                <div className="text-[9px] text-amber-800 uppercase font-bold">Kelompok C (&lt;60%)</div>
+                <div className="text-base font-bold font-mono text-amber-700">{keterlibatanData.groupCCount} Guru</div>
+              </div>
+              <div>
+                <div className="text-[9px] text-rose-800 uppercase font-bold">Kelompok D (0%)</div>
+                <div className="text-base font-bold font-mono text-rose-700">{keterlibatanData.groupDCount} Guru</div>
+              </div>
+            </div>
 
-        {/* Tabel Rincian Guru Izin */}
-        <div className="mb-8">
-          <h3 className="text-sm font-bold border-b border-slate-300 pb-1 mb-2 text-slate-800">Daftar Keterangan Guru Izin / Ketidakhadiran</h3>
-          {reportStats.leaveTeachersList.length === 0 ? (
-            <p className="text-xs italic text-slate-500">Nihil - Seluruh guru KBM mengajar sesuai jadwal.</p>
-          ) : (
-            <table className="w-full text-xs text-left border border-slate-300 border-collapse">
-              <thead className="bg-slate-100 font-bold">
-                <tr>
-                  <th className="border border-slate-300 p-2">No</th>
-                  <th className="border border-slate-300 p-2">Kelas</th>
-                  <th className="border border-slate-300 p-2">Nama Guru Pengampu</th>
-                  <th className="border border-slate-300 p-2">Status</th>
-                  <th className="border border-slate-300 p-2">Keterangan</th>
-                </tr>
-              </thead>
-              <tbody>
-                {reportStats.leaveTeachersList.map((t, idx) => (
-                  <tr key={idx}>
-                    <td className="border border-slate-300 p-2 font-mono">{idx + 1}</td>
-                    <td className="border border-slate-300 p-2 font-mono">{t.kelas}</td>
-                    <td className="border border-slate-300 p-2 font-bold">{t.nama}</td>
-                    <td className="border border-slate-300 p-2">{t.status}</td>
-                    <td className="border border-slate-300 p-2">{t.info}</td>
+            {/* Tabel Rincian Keterlibatan Guru */}
+            <div className="mb-8">
+              <h3 className="text-sm font-bold border-b border-slate-300 pb-1 mb-2 text-slate-800">Daftar Keterlibatan Guru Mengisi Absensi Mandiri</h3>
+              <table className="w-full text-xs text-left border border-slate-300 border-collapse">
+                <thead className="bg-slate-100 font-bold">
+                  <tr>
+                    <th className="border border-slate-300 p-2">No</th>
+                    <th className="border border-slate-300 p-2">Kode</th>
+                    <th className="border border-slate-300 p-2">Nama Guru Pengampu</th>
+                    <th className="border border-slate-300 p-2 text-center">Target Sesi</th>
+                    <th className="border border-slate-300 p-2 text-center">Input Mandiri</th>
+                    <th className="border border-slate-300 p-2 text-center">Persentase</th>
+                    <th className="border border-slate-300 p-2">Kelompok Kuadran</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+                </thead>
+                <tbody>
+                  {keterlibatanData.list.map((t, idx) => (
+                    <tr key={idx}>
+                      <td className="border border-slate-300 p-2 font-mono">{idx + 1}</td>
+                      <td className="border border-slate-300 p-2 font-mono">{t.kodeGuru}</td>
+                      <td className="border border-slate-300 p-2 font-bold">{t.namaLengkap}</td>
+                      <td className="border border-slate-300 p-2 font-mono text-center">{t.totalSesi}</td>
+                      <td className="border border-slate-300 p-2 font-mono text-center">{t.inputMandiriSesi}</td>
+                      <td className="border border-slate-300 p-2 font-mono font-bold text-center">{t.percentage}%</td>
+                      <td className="border border-slate-300 p-2 font-semibold">{t.groupName}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Ringkasan Statistik Cetak KBM */}
+            <div className="grid grid-cols-5 gap-3 mb-6 border border-slate-300 p-4 rounded-lg bg-slate-50 text-center">
+              <div>
+                <div className="text-[9px] text-slate-500 uppercase font-bold">Total Sesi KBM</div>
+                <div className="text-base font-bold font-mono">{reportStats.totalSessions} Sesi</div>
+              </div>
+              <div>
+                <div className="text-[9px] text-slate-500 uppercase font-bold">Sesi Hadir</div>
+                <div className="text-base font-bold font-mono text-emerald-700">{reportStats.presentCount} ({reportStats.presencePercent}%)</div>
+              </div>
+              <div>
+                <div className="text-[9px] text-slate-500 uppercase font-bold">% Keterlibatan Guru</div>
+                <div className="text-base font-bold font-mono text-indigo-700">{reportStats.appCompliancePercent}%</div>
+              </div>
+              <div>
+                <div className="text-[9px] text-slate-500 uppercase font-bold">Izin / Sakit</div>
+                <div className="text-base font-bold font-mono text-amber-700">{reportStats.leaveCount} Sesi</div>
+              </div>
+              <div>
+                <div className="text-[9px] text-slate-500 uppercase font-bold">Belum Absen</div>
+                <div className="text-base font-bold font-mono text-rose-700">{reportStats.unconfirmedCount} Sesi</div>
+              </div>
+            </div>
+
+            {/* Tabel Rincian Guru Izin */}
+            <div className="mb-8">
+              <h3 className="text-sm font-bold border-b border-slate-300 pb-1 mb-2 text-slate-800">Daftar Keterangan Guru Izin / Ketidakhadiran</h3>
+              {reportStats.leaveTeachersList.length === 0 ? (
+                <p className="text-xs italic text-slate-500">Nihil - Seluruh guru KBM mengajar sesuai jadwal.</p>
+              ) : (
+                <table className="w-full text-xs text-left border border-slate-300 border-collapse">
+                  <thead className="bg-slate-100 font-bold">
+                    <tr>
+                      <th className="border border-slate-300 p-2">No</th>
+                      <th className="border border-slate-300 p-2">Kelas</th>
+                      <th className="border border-slate-300 p-2">Nama Guru Pengampu</th>
+                      <th className="border border-slate-300 p-2">Status</th>
+                      <th className="border border-slate-300 p-2">Keterangan</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportStats.leaveTeachersList.map((t, idx) => (
+                      <tr key={idx}>
+                        <td className="border border-slate-300 p-2 font-mono">{idx + 1}</td>
+                        <td className="border border-slate-300 p-2 font-mono">{t.kelas}</td>
+                        <td className="border border-slate-300 p-2 font-bold">{t.nama}</td>
+                        <td className="border border-slate-300 p-2">{t.status}</td>
+                        <td className="border border-slate-300 p-2">{t.info}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </>
+        )}
 
         {/* Kolom Tanda Tangan */}
         <div className="grid grid-cols-2 gap-12 mt-12 text-center text-xs">
@@ -830,6 +1114,40 @@ _Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
 
       {/* HEADER RUANG KERJA LAPORAN & SEGMENTED TABS PERIODE */}
       <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-4">
+        {/* SUB-MENU TAB NAVIGATION: KBM vs KETERLIBATAN GURU */}
+        <div className="flex items-center gap-2 border-b border-slate-200/80 pb-3">
+          <button
+            type="button"
+            onClick={() => setActiveReportSubTab('kbm')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeReportSubTab === 'kbm'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            <FileText className="w-4 h-4 text-rose-400" />
+            <span>1. LAPORAN KBM</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveReportSubTab('keterlibatan')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeReportSubTab === 'keterlibatan'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            <Award className="w-4 h-4 text-amber-300" />
+            <span>2. KETERLIBATAN GURU</span>
+            {keterlibatanData.groupDCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-rose-500 text-white animate-pulse">
+                {keterlibatanData.groupDCount} Nihil
+              </span>
+            )}
+          </button>
+        </div>
+
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
             <h2 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
@@ -1157,8 +1475,248 @@ _Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
 
       </div>
 
-      {/* 5 KARTU STATISTIK UTAMA (TERMASUK TOTAL KEPATUHAN GURU MENGISI APLIKASI) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+      {/* KONTEN UTAMA DENGAN DUA SUB-TAB: 1. KBM | 2. KETERLIBATAN */}
+      {activeReportSubTab === 'keterlibatan' ? (
+        <div className="space-y-4">
+          {/* INFOGRAFIS TOP ROW (4 KARTU) */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <div className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-2xs">
+              <span className="text-[10.5px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                Total Sesi Terjadwal
+              </span>
+              <span className="text-2xl font-black font-mono text-slate-900 tabular-nums">
+                {reportStats.totalSessions}
+              </span>
+              <span className="text-[10px] text-slate-400 block mt-1">Sesi KBM Terdaftar</span>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-emerald-50/80 border border-emerald-200 shadow-2xs">
+              <span className="text-[10.5px] font-bold text-emerald-800 uppercase tracking-wider block mb-1">
+                % Kehadiran KBM
+              </span>
+              <span className="text-2xl font-black font-mono text-emerald-700 tabular-nums">
+                {reportStats.presencePercent}%
+              </span>
+              <span className="text-[10px] text-emerald-700 block mt-1">({reportStats.presentCount} Sesi Hadir)</span>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 shadow-2xs">
+              <span className="text-[10.5px] font-bold text-amber-800 uppercase tracking-wider block mb-1">
+                Izin / Sakit / Dinas
+              </span>
+              <span className="text-2xl font-black font-mono text-amber-700 tabular-nums">
+                {reportStats.leaveCount}
+              </span>
+              <span className="text-[10px] text-amber-700 block mt-1">Sesi Perizinan</span>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-indigo-50/80 border border-indigo-200 shadow-2xs">
+              <span className="text-[10.5px] font-bold text-indigo-900 uppercase tracking-wider block mb-1">
+                % Keterlibatan Guru
+              </span>
+              <span className="text-2xl font-black font-mono text-indigo-800 tabular-nums">
+                {reportStats.appCompliancePercent}%
+              </span>
+              <span className="text-[10px] text-indigo-700 block mt-1">Input Absensi Mandiri</span>
+            </div>
+          </div>
+
+          {/* RINGKASAN 4 KUADRAN KETERLIBATAN GURU */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 text-white shadow-md space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+              <div>
+                <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                  <Award className="w-4 h-4 text-amber-400" />
+                  <span>Kuadran Keterlibatan Guru Mengisi Absensi Mandiri</span>
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Dievaluasi dari {keterlibatanData.totalTeachersEvaluated} guru yang memiliki jadwal mengajar pada periode terpilih
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <div 
+                onClick={() => setKeterlibatanFilterGroup(prev => prev === 'A' ? 'all' : 'A')}
+                className={`p-3 rounded-xl border transition cursor-pointer ${
+                  keterlibatanFilterGroup === 'A' 
+                    ? 'bg-emerald-950 border-emerald-400 ring-2 ring-emerald-500/50' 
+                    : 'bg-slate-800/80 hover:bg-slate-800 border-emerald-500/40'
+                }`}
+              >
+                <div className="flex items-center justify-between text-emerald-300 text-xs font-bold mb-1">
+                  <span>Kelompok A</span>
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                </div>
+                <div className="text-xl font-black font-mono text-emerald-300">
+                  {keterlibatanData.groupACount} <span className="text-xs font-normal text-slate-300">Guru</span>
+                </div>
+                <span className="text-[10px] text-emerald-400 block mt-0.5 font-medium">Keterlibatan Penuh (100%)</span>
+              </div>
+
+              <div 
+                onClick={() => setKeterlibatanFilterGroup(prev => prev === 'B' ? 'all' : 'B')}
+                className={`p-3 rounded-xl border transition cursor-pointer ${
+                  keterlibatanFilterGroup === 'B' 
+                    ? 'bg-indigo-950 border-indigo-400 ring-2 ring-indigo-500/50' 
+                    : 'bg-slate-800/80 hover:bg-slate-800 border-indigo-500/40'
+                }`}
+              >
+                <div className="flex items-center justify-between text-indigo-300 text-xs font-bold mb-1">
+                  <span>Kelompok B</span>
+                  <UserCheck className="w-3.5 h-3.5 text-indigo-400" />
+                </div>
+                <div className="text-xl font-black font-mono text-indigo-300">
+                  {keterlibatanData.groupBCount} <span className="text-xs font-normal text-slate-300">Guru</span>
+                </div>
+                <span className="text-[10px] text-indigo-400 block mt-0.5 font-medium">Keterlibatan Tinggi (60-99%)</span>
+              </div>
+
+              <div 
+                onClick={() => setKeterlibatanFilterGroup(prev => prev === 'C' ? 'all' : 'C')}
+                className={`p-3 rounded-xl border transition cursor-pointer ${
+                  keterlibatanFilterGroup === 'C' 
+                    ? 'bg-amber-950 border-amber-400 ring-2 ring-amber-500/50' 
+                    : 'bg-slate-800/80 hover:bg-slate-800 border-amber-500/40'
+                }`}
+              >
+                <div className="flex items-center justify-between text-amber-300 text-xs font-bold mb-1">
+                  <span>Kelompok C</span>
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                </div>
+                <div className="text-xl font-black font-mono text-amber-300">
+                  {keterlibatanData.groupCCount} <span className="text-xs font-normal text-slate-300">Guru</span>
+                </div>
+                <span className="text-[10px] text-amber-400 block mt-0.5 font-medium">Keterlibatan Rendah (&lt;60%)</span>
+              </div>
+
+              <div 
+                onClick={() => setKeterlibatanFilterGroup(prev => prev === 'D' ? 'all' : 'D')}
+                className={`p-3 rounded-xl border transition cursor-pointer ${
+                  keterlibatanFilterGroup === 'D' 
+                    ? 'bg-rose-950 border-rose-400 ring-2 ring-rose-500/50' 
+                    : 'bg-slate-800/80 hover:bg-slate-800 border-rose-500/40'
+                }`}
+              >
+                <div className="flex items-center justify-between text-rose-300 text-xs font-bold mb-1">
+                  <span>Kelompok D</span>
+                  <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                </div>
+                <div className="text-xl font-black font-mono text-rose-300">
+                  {keterlibatanData.groupDCount} <span className="text-xs font-normal text-slate-300">Guru</span>
+                </div>
+                <span className="text-[10px] text-rose-400 block mt-0.5 font-medium">Nihil Laporan (0%)</span>
+              </div>
+            </div>
+          </div>
+
+          {/* TABEL REKAPITULASI TUNGGAL KETERLIBATAN GURU */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-indigo-600" />
+                <h3 className="font-bold text-xs text-slate-900">
+                  Tabel Rekapitulasi Keterlibatan Guru ({filteredKeterlibatanList.length} Guru)
+                </h3>
+              </div>
+
+              {/* Pencarian Nama Guru & Filter Group */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                  <input
+                    type="text"
+                    value={keterlibatanSearch}
+                    onChange={e => setKeterlibatanSearch(e.target.value)}
+                    placeholder="Cari Nama / Kode Guru..."
+                    className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-indigo-500 w-44 sm:w-56"
+                  />
+                </div>
+
+                <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-xs font-semibold">
+                  <button
+                    onClick={() => setKeterlibatanFilterGroup('all')}
+                    className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${keterlibatanFilterGroup === 'all' ? 'bg-slate-900 text-white font-bold' : 'text-slate-600 hover:text-slate-900'}`}
+                  >
+                    Semua
+                  </button>
+                  <button
+                    onClick={() => setKeterlibatanFilterGroup('A')}
+                    className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${keterlibatanFilterGroup === 'A' ? 'bg-emerald-600 text-white font-bold' : 'text-emerald-700 hover:bg-emerald-100'}`}
+                  >
+                    Kel. A
+                  </button>
+                  <button
+                    onClick={() => setKeterlibatanFilterGroup('B')}
+                    className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${keterlibatanFilterGroup === 'B' ? 'bg-indigo-600 text-white font-bold' : 'text-indigo-700 hover:bg-indigo-100'}`}
+                  >
+                    Kel. B
+                  </button>
+                  <button
+                    onClick={() => setKeterlibatanFilterGroup('C')}
+                    className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${keterlibatanFilterGroup === 'C' ? 'bg-amber-600 text-white font-bold' : 'text-amber-700 hover:bg-amber-100'}`}
+                  >
+                    Kel. C
+                  </button>
+                  <button
+                    onClick={() => setKeterlibatanFilterGroup('D')}
+                    className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${keterlibatanFilterGroup === 'D' ? 'bg-rose-600 text-white font-bold' : 'text-rose-700 hover:bg-rose-100'}`}
+                  >
+                    Kel. D
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {filteredKeterlibatanList.length === 0 ? (
+              <div className="p-6 text-center text-xs text-slate-500 bg-slate-50 rounded-xl border border-slate-200">
+                Tidak ditemukan data guru untuk kriteria pencarian / filter ini.
+              </div>
+            ) : (
+              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-100 text-slate-700 border-b border-slate-200 font-bold text-[11px]">
+                    <tr>
+                      <th className="py-2.5 px-3">No</th>
+                      <th className="py-2.5 px-3">Kode</th>
+                      <th className="py-2.5 px-3">Nama Lengkap Guru Pengampu</th>
+                      <th className="py-2.5 px-3 text-center">Target Sesi</th>
+                      <th className="py-2.5 px-3 text-center">Input Mandiri</th>
+                      <th className="py-2.5 px-3 text-center">Persentase</th>
+                      <th className="py-2.5 px-3">Kelompok Kuadran</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {filteredKeterlibatanList.map((item, idx) => (
+                      <tr key={item.kodeGuru} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-2.5 px-3 text-slate-400 font-mono">{idx + 1}</td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-slate-800">{item.kodeGuru}</td>
+                        <td className="py-2.5 px-3 font-bold text-slate-900">{item.namaLengkap}</td>
+                        <td className="py-2.5 px-3 font-mono text-center text-slate-700">{item.totalSesi} Sesi</td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-center text-indigo-900">{item.inputMandiriSesi} Sesi</td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span className="font-mono font-black text-xs text-slate-900">
+                            {item.percentage}%
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span className={`inline-block px-2.5 py-0.5 rounded-full font-bold text-[10.5px] border ${item.badgeBg}`}>
+                            {item.groupName}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* KBM DASHBOARD (EXISTING) */
+        <>
+          {/* 5 KARTU STATISTIK UTAMA (TERMASUK TOTAL KEPATUHAN GURU MENGISI APLIKASI) */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
         
         {/* KARTU 1: TOTAL SESI TERJADWAL */}
         <div className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-2xs flex flex-col justify-between">
@@ -1192,10 +1750,10 @@ _Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
           <span className="text-[10px] text-emerald-700 mt-1">Hadir / Infal Pengganti</span>
         </div>
 
-        {/* KARTU 3: TOTAL KEPATUHAN GURU MENGISI APLIKASI */}
+        {/* KARTU 3: % KETERLIBATAN GURU */}
         <div className="p-3.5 rounded-2xl bg-indigo-50/80 border border-indigo-200 shadow-2xs flex flex-col justify-between">
           <span className="text-[10.5px] font-bold text-indigo-900 uppercase tracking-wider block mb-1 flex items-center justify-between">
-            <span>Total Kepatuhan Guru</span>
+            <span>% Keterlibatan Guru</span>
             <Award className="w-3.5 h-3.5 text-indigo-600" />
           </span>
           <div className="flex items-baseline gap-1.5">
@@ -1417,6 +1975,8 @@ _Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
           </div>
         )}
       </div>
+      </>
+      )}
 
       {/* POP-UP MODAL PRATINJAU WHATSAPP & TOMBOL KIRIM */}
       {isWaModalOpen && (
@@ -1443,7 +2003,7 @@ _Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
 
             {/* Kotak Teks Tampilan WhatsApp */}
             <div className="p-3 bg-emerald-950 text-emerald-100 rounded-xl font-mono text-xs whitespace-pre-wrap leading-relaxed max-h-[260px] overflow-y-auto border border-emerald-800 shadow-inner">
-              {waMessageText}
+              {activeWaText}
             </div>
 
             {/* Dua Tombol Aksi WA */}

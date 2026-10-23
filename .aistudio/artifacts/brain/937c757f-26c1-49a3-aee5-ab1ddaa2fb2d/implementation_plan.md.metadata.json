@@ -1,6 +1,6 @@
 {
-  "summary":  "Rancangan penambahan tampilan Hari & Tanggal (contoh: Kamis, 22 Okt 2026) tepat di samping kanan waktu WIB pada kotak Realtime di sub-header status bar (TopNav.tsx).",
-  "updatedAt":  "2026-10-22T09:25:26.614153393Z",
+  "summary":  "Rencana pembaruan format pesan WhatsApp untuk Laporan Keterlibatan Guru dengan urutan Penuh (A), Nihil (D), Tinggi (B), dan Rendah (C), dilengkapi emoji kuadran dan fallback saat kosong.",
+  "updatedAt":  "2026-10-23T04:16:37.894946032Z",
   "requestFeedback":  true,
   "userFacing":  true
 }
