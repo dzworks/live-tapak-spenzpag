@@ -964,6 +964,11 @@ _Diunduh & disinkronkan otomatis dari Sistem TAPAK Live Monitoring_`;
 🗓 *Periode*: ${reportStats.titlePeriod}
 📊 *Evaluasi Guru Terjadwal*: ${keterlibatanData.totalTeachersEvaluated} Guru
 ----------------------------------------
+📈 Persentase keterlibatan guru: ${reportStats.appCompliancePercent}%
+📊 Total Sesi: ${reportStats.totalSessions} Sesi
+📱 Guru mengisi aplikasi: ${reportStats.filledAppCount} Sesi
+🔴 Guru belum isi aplikasi: ${reportStats.unconfirmedCount} Sesi
+----------------------------------------
 🟢 *Kelompok A (Keterlibatan Penuh 100%)*: ${keterlibatanData.groupACount} Guru
 🔵 *Kelompok B (Keterlibatan Tinggi 60-99%)*: ${keterlibatanData.groupBCount} Guru
 🟠 *Kelompok C (Keterlibatan Rendah <60%)*: ${keterlibatanData.groupCCount} Guru
