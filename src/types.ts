@@ -170,3 +170,7 @@ export interface TeacherInfo {
 export type ViewTab = 'matrix' | 'empty-classes' | 'feed' | 'piket' | 'reports';
 
 export type DayType = 'regular' | 'friday' | 'weekend';
+
+export type MatrixColumnItem =
+  | { type: 'period'; period: number; label: string; startTime: string; endTime: string }
+  | { type: 'break'; id: string; label: string; startTime: string; endTime: string };

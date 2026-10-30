@@ -11,7 +11,8 @@ import {
   DayType,
   MasterLoginAccount,
   HariLiburItem,
-  PeriodeAkademik
+  PeriodeAkademik,
+  MatrixColumnItem
 } from '../types';
 import { parsePeriodRange } from '../utils/appsScriptCode';
 
@@ -956,6 +957,34 @@ export function getScheduleForDate(dateStr: string): PeriodSchedule[] {
     return PERIOD_SCHEDULES_FRIDAY;
   }
   return PERIOD_SCHEDULES_REGULAR;
+}
+
+export function getMatrixColumnsForDate(dateStr: string): MatrixColumnItem[] {
+  const dayType = getDayType(dateStr);
+  if (dayType === 'friday') {
+    return [
+      { type: 'period', period: 1, label: 'Jam 1', startTime: '07:30', endTime: '08:00' },
+      { type: 'period', period: 2, label: 'Jam 2', startTime: '08:00', endTime: '08:30' },
+      { type: 'period', period: 3, label: 'Jam 3', startTime: '08:30', endTime: '09:00' },
+      { type: 'break', id: 'break-fri', label: 'Istirahat', startTime: '09:00', endTime: '09:45' },
+      { type: 'period', period: 4, label: 'Jam 4', startTime: '09:45', endTime: '10:15' },
+      { type: 'period', period: 5, label: 'Jam 5', startTime: '10:15', endTime: '10:45' },
+    ];
+  }
+
+  return [
+    { type: 'period', period: 1, label: 'Jam 1', startTime: '07:00', endTime: '07:40' },
+    { type: 'period', period: 2, label: 'Jam 2', startTime: '07:40', endTime: '08:20' },
+    { type: 'period', period: 3, label: 'Jam 3', startTime: '08:20', endTime: '09:00' },
+    { type: 'period', period: 4, label: 'Jam 4', startTime: '09:00', endTime: '09:40' },
+    { type: 'break', id: 'break-reg-1', label: 'Istirahat 1', startTime: '09:40', endTime: '10:00' },
+    { type: 'period', period: 5, label: 'Jam 5', startTime: '10:00', endTime: '10:40' },
+    { type: 'period', period: 6, label: 'Jam 6', startTime: '10:40', endTime: '11:20' },
+    { type: 'period', period: 7, label: 'Jam 7', startTime: '11:20', endTime: '12:00' },
+    { type: 'break', id: 'break-reg-2', label: 'Ist 2 Dzuhur', startTime: '12:00', endTime: '12:40' },
+    { type: 'period', period: 8, label: 'Jam 8', startTime: '12:40', endTime: '13:20' },
+    { type: 'period', period: 9, label: 'Jam 9', startTime: '13:20', endTime: '14:00' },
+  ];
 }
 
 export function getDayLabel(dateStr: string): { label: string; jpCount: number; isWeekend: boolean } {

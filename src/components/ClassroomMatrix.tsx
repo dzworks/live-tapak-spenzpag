@@ -12,14 +12,16 @@ import {
 import { 
   getScheduleForDate, 
   getDayLabel, 
-  getDayType 
+  getDayType,
+  getMatrixColumnsForDate
 } from '../data/initialData';
 import { 
   getDayNameIndonesian, 
   resolveScheduleSlot,
   normalizeClassName,
   isSameDate,
-  isSampleEntity
+  isSampleEntity,
+  isRegularClassroomLocation
 } from '../utils/appsScriptCode';
 import { calculateSlotTimeMarker, timeStringToMinutes, extractCleanTime } from '../utils/timeMarker';
 import { 
@@ -36,7 +38,8 @@ import {
   X,
   BellRing,
   Columns,
-  LayoutGrid
+  LayoutGrid,
+  Coffee
 } from 'lucide-react';
 
 interface ClassroomMatrixProps {
@@ -92,6 +95,7 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
 
   // Info Hari & Master Jadwal Sesuai Hari (Reguler 9 JP / Jumat 5 JP / Akhir Pekan Libur)
   const currentSchedules = useMemo(() => getScheduleForDate(selectedDate), [selectedDate]);
+  const matrixColumns = useMemo(() => getMatrixColumnsForDate(selectedDate), [selectedDate]);
   const dayInfo = useMemo(() => getDayLabel(selectedDate), [selectedDate]);
   const dayType = useMemo(() => getDayType(selectedDate), [selectedDate]);
   const dayNameIndo = useMemo(() => getDayNameIndonesian(selectedDate), [selectedDate]);
@@ -180,46 +184,42 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
 
   // Lebar proporsional untuk kolom (100% pembagian rata tanpa scrollbar horizontal)
   const classColWidthPercent = 12; // 12% untuk kolom nama rombel
-  const periodColWidthPercent = currentSchedules.length > 0
-    ? (100 - classColWidthPercent) / currentSchedules.length
+  const colWidthPercent = matrixColumns.length > 0
+    ? (100 - classColWidthPercent) / matrixColumns.length
     : 10;
+  const periodColWidthPercent = colWidthPercent;
 
   // Kalkulasi posisi % Garis Vertikal Realtime (Merah Bercahaya)
-  // Menjamin 100% sinkron dengan kolom jam aktif (sorotan hijau)
+  // Menjamin 100% sinkron dengan kolom jam aktif (sorotan hijau) dan kolom istirahat
   const realtimeLinePercent = useMemo(() => {
-    if (!wibTimeStr || currentSchedules.length === 0 || isWeekend) return null;
+    if (!wibTimeStr || matrixColumns.length === 0 || isWeekend) return null;
     const nowM = timeStringToMinutes(wibTimeStr);
     if (nowM === null) return null;
 
-    const totalPeriods = currentSchedules.length;
-    const firstPeriod = currentSchedules[0];
-    const lastPeriod = currentSchedules[totalPeriods - 1];
+    const firstCol = matrixColumns[0];
+    const lastCol = matrixColumns[matrixColumns.length - 1];
+    const startM = timeStringToMinutes(firstCol.startTime) ?? 420;
+    const endM = timeStringToMinutes(lastCol.endTime) ?? 930;
 
-    const startM = timeStringToMinutes(firstPeriod.startTime) ?? 420;
-    const endM = timeStringToMinutes(lastPeriod.endTime) ?? 930;
+    // Prioritas 1: Jika berada tepat di rentang waktu kolom tertentu (termasuk jam istirahat)
+    let targetIndex = matrixColumns.findIndex(col => {
+      const cStart = timeStringToMinutes(col.startTime) ?? 0;
+      const cEnd = timeStringToMinutes(col.endTime) ?? 0;
+      return nowM >= cStart && nowM <= cEnd;
+    });
 
-    // Prioritas 1: Sinkronisasi 100% dengan kolom jam aktif saat ini (yang ber-sorotan hijau)
-    let targetIndex = -1;
-    if (activePeriodNumber > 0) {
-      targetIndex = currentSchedules.findIndex(p => p.period === activePeriodNumber);
-    }
-
-    // Prioritas 2: Jika activePeriodNumber belum terdeteksi, cari dari jam nowM
-    if (targetIndex === -1) {
-      targetIndex = currentSchedules.findIndex(p => {
-        const pStart = timeStringToMinutes(p.startTime) ?? 0;
-        const pEnd = timeStringToMinutes(p.endTime) ?? 0;
-        return nowM >= pStart && nowM <= pEnd;
-      });
+    // Prioritas 2: Jika activePeriodNumber valid dan targetIndex belum match
+    if (targetIndex === -1 && activePeriodNumber > 0) {
+      targetIndex = matrixColumns.findIndex(col => col.type === 'period' && col.period === activePeriodNumber);
     }
 
     if (targetIndex !== -1) {
-      const p = currentSchedules[targetIndex];
-      const pStart = timeStringToMinutes(p.startTime) ?? (startM + targetIndex * 40);
-      const pEnd = timeStringToMinutes(p.endTime) ?? (pStart + 40);
-      const duration = Math.max(1, pEnd - pStart);
-      const frac = Math.min(1, Math.max(0, (nowM - pStart) / duration));
-      return classColWidthPercent + targetIndex * periodColWidthPercent + frac * periodColWidthPercent;
+      const col = matrixColumns[targetIndex];
+      const cStart = timeStringToMinutes(col.startTime) ?? (startM + targetIndex * 40);
+      const cEnd = timeStringToMinutes(col.endTime) ?? (cStart + 40);
+      const duration = Math.max(1, cEnd - cStart);
+      const frac = Math.min(1, Math.max(0, (nowM - cStart) / duration));
+      return classColWidthPercent + targetIndex * colWidthPercent + frac * colWidthPercent;
     }
 
     // Jika waktu sebelum jam KBM pertama
@@ -227,21 +227,8 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
     // Jika waktu setelah jam KBM terakhir
     if (nowM > endM) return 100;
 
-    // Jika tepat di jeda istirahat antar jam KBM
-    for (let i = 0; i < totalPeriods - 1; i++) {
-      const pCurr = currentSchedules[i];
-      const pNext = currentSchedules[i + 1];
-      const currEnd = timeStringToMinutes(pCurr.endTime) ?? 0;
-      const nextStart = timeStringToMinutes(pNext.startTime) ?? 0;
-
-      if (nowM > currEnd && nowM < nextStart) {
-        const frac = (nowM - currEnd) / Math.max(1, nextStart - currEnd);
-        return classColWidthPercent + (i + 1) * periodColWidthPercent + (frac * 0.2 - 0.1) * periodColWidthPercent;
-      }
-    }
-
     return null;
-  }, [wibTimeStr, currentSchedules, isWeekend, activePeriodNumber, classColWidthPercent, periodColWidthPercent]);
+  }, [wibTimeStr, matrixColumns, isWeekend, activePeriodNumber, classColWidthPercent, colWidthPercent]);
 
   // Status detail per kelas untuk jam aktif saat ini & rekapan hari ini
   const classStatusMap = useMemo(() => {
@@ -683,8 +670,8 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                           <span className="text-[10px] font-mono text-slate-500 font-normal">
                             Jam 1 s/d {currentSchedules.length}
                           </span>
-                          <span className="hidden sm:inline-block text-[10px] text-slate-400 font-normal">
-                            (Gulir horizontal jika diperlukan)
+                          <span className="hidden sm:inline-block text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/60 font-medium">
+                            ☕ Ada Kolom Istirahat
                           </span>
                         </div>
                       </div>
@@ -722,12 +709,35 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                                     </span>
                                   </div>
                                 </th>
-                                {currentSchedules.map(schedule => {
-                                  const isCurrent = schedule.period === activePeriodNumber;
+                                {matrixColumns.map(col => {
+                                  if (col.type === 'break') {
+                                    return (
+                                      <th
+                                        key={col.id}
+                                        style={{ 
+                                          width: `${colWidthPercent}%`, 
+                                          minWidth: (activeFullscreen || showDualColumn) ? undefined : (isUltraCompact ? '56px' : '72px') 
+                                        }}
+                                        className="py-1.5 px-1 text-center border-r border-amber-300/70 bg-amber-100/70 text-amber-950 font-semibold select-none"
+                                      >
+                                        <div className="flex flex-col items-center leading-tight">
+                                          <div className="flex items-center justify-center gap-1 text-amber-900">
+                                            <Coffee className="w-3 h-3 text-amber-700 shrink-0" />
+                                            <span className="truncate font-bold text-xs">{col.label}</span>
+                                          </div>
+                                          <span className="text-[9px] font-mono text-amber-800/90 font-medium tabular-nums truncate whitespace-nowrap mt-0.5">
+                                            {col.startTime} - {col.endTime}
+                                          </span>
+                                        </div>
+                                      </th>
+                                    );
+                                  }
+
+                                  const isCurrent = col.period === activePeriodNumber;
                                   return (
                                     <th
-                                      key={schedule.period}
-                                      data-period={schedule.period}
+                                      key={`period-${col.period}`}
+                                      data-period={col.period}
                                       style={{ 
                                         width: `${periodColWidthPercent}%`, 
                                         minWidth: (activeFullscreen || showDualColumn) ? undefined : (isUltraCompact ? '64px' : '78px') 
@@ -736,26 +746,26 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                                         isCurrent ? 'bg-emerald-100/70 text-emerald-950 font-bold ring-1 ring-inset ring-emerald-500/40' : 'bg-slate-100/90'
                                       }`}
                                     >
-                                    <div className="flex flex-col items-center leading-tight">
-                                      <div className="flex items-center justify-center gap-1">
-                                        <span className="truncate font-bold text-xs">{schedule.label}</span>
-                                        {isCurrent && (
-                                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse shrink-0" title="Jam Aktif"></span>
-                                        )}
+                                      <div className="flex flex-col items-center leading-tight">
+                                        <div className="flex items-center justify-center gap-1">
+                                          <span className="truncate font-bold text-xs">{col.label}</span>
+                                          {isCurrent && (
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse shrink-0" title="Jam Aktif"></span>
+                                          )}
+                                        </div>
+                                        <span className="text-[9px] font-mono text-slate-500 font-normal tabular-nums truncate whitespace-nowrap mt-0.5">
+                                          {col.startTime} - {col.endTime}
+                                        </span>
                                       </div>
-                                      <span className="text-[9px] font-mono text-slate-500 font-normal tabular-nums truncate whitespace-nowrap mt-0.5">
-                                        {schedule.startTime} - {schedule.endTime}
-                                      </span>
-                                    </div>
-                                  </th>
-                                );
-                              })}
+                                    </th>
+                                  );
+                                })}
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-200 text-xs">
                             {classList.length === 0 ? (
                               <tr>
-                                <td colSpan={currentSchedules.length + 1} className="py-8 text-center text-slate-500 bg-slate-50/50">
+                                <td colSpan={matrixColumns.length + 1} className="py-8 text-center text-slate-500 bg-slate-50/50">
                                   <span className="text-xs font-semibold text-slate-600">Tidak ada rombel pada kolom ini</span>
                                 </td>
                               </tr>
@@ -766,18 +776,67 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                                 let skipPeriods = 0;
                                 const totalPeriods = currentSchedules.length;
 
-                                for (let period = 1; period <= totalPeriods; period++) {
+                                for (let cIdx = 0; cIdx < matrixColumns.length; cIdx++) {
+                                  const col = matrixColumns[cIdx];
+
+                                  if (col.type === 'break') {
+                                    skipPeriods = 0;
+                                    cells.push(
+                                      <td
+                                        key={`break-${cls.idKelas || cls.namaKelas}-${col.id}`}
+                                        style={{ 
+                                          width: `${colWidthPercent}%`,
+                                          minWidth: (activeFullscreen || showDualColumn) ? undefined : (isUltraCompact ? '56px' : '72px')
+                                        }}
+                                        className="border-r border-amber-200/80 bg-amber-50/40 align-middle select-none p-0.5"
+                                        title={`${col.label} (${col.startTime} - ${col.endTime})`}
+                                      >
+                                        <div className={`rounded bg-amber-100/50 border border-dashed border-amber-300/70 flex flex-col items-center justify-center text-amber-800 ${
+                                          isUltraCompact ? 'min-h-[28px] py-0.5' : 'min-h-[68px] py-1'
+                                        }`}>
+                                          <Coffee className="w-3 h-3 text-amber-700 opacity-80" />
+                                          <span className="text-[8px] font-bold tracking-tight text-amber-800 uppercase mt-0.5">
+                                            Istirahat
+                                          </span>
+                                        </div>
+                                      </td>
+                                    );
+                                    continue;
+                                  }
+
+                                  const period = col.period;
                                   if (skipPeriods > 0) {
                                     skipPeriods--;
                                     continue;
                                   }
 
-                                  const schedule = getScheduleStartingAt(cls.namaKelas, period);
-                                  const isCurrent = period === activePeriodNumber;
+                                  const schedule =
+                                    getScheduleStartingAt(cls.namaKelas, period) ||
+                                    getCoveringSchedule(cls.namaKelas, period);
 
                                   if (schedule) {
-                                    const span = Math.min(schedule.spanJP, totalPeriods - period + 1);
+                                    const maxEndPeriod = Math.min(schedule.endPeriod, totalPeriods);
+                                    let span = 1;
+                                    let segmentEndPeriod = period;
+
+                                    for (let nextIdx = cIdx + 1; nextIdx < matrixColumns.length; nextIdx++) {
+                                      const nextCol = matrixColumns[nextIdx];
+                                      if (nextCol.type === 'break') {
+                                        break;
+                                      }
+                                      if (nextCol.period <= maxEndPeriod) {
+                                        span++;
+                                        segmentEndPeriod = nextCol.period;
+                                      } else {
+                                        break;
+                                      }
+                                    }
+
                                     skipPeriods = span - 1;
+                                    const isCurrent =
+                                      activePeriodNumber !== null &&
+                                      activePeriodNumber >= period &&
+                                      activePeriodNumber <= segmentEndPeriod;
 
                                     const slot = resolveScheduleSlot(
                                       schedule,
@@ -806,9 +865,20 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                                       colorStyle = 'bg-slate-50/70 border-slate-200 text-slate-700 hover:bg-slate-100';
                                     }
 
-                                    const slotStartTime = schedule.jamMulai || currentSchedules.find(p => p.period === schedule.startPeriod)?.startTime || '07:00';
-                                    const slotEndTime = schedule.jamSelesai || currentSchedules.find(p => p.period === schedule.endPeriod)?.endTime || '08:20';
+                                    const segmentStartScheduleObj = currentSchedules.find(p => p.period === period);
+                                    const segmentEndScheduleObj = currentSchedules.find(p => p.period === segmentEndPeriod);
+                                    const isSplitSegment = period > schedule.startPeriod || segmentEndPeriod < schedule.endPeriod;
+
+                                    const slotStartTime = isSplitSegment
+                                      ? (segmentStartScheduleObj?.startTime || schedule.jamMulai || '07:00')
+                                      : (schedule.jamMulai || segmentStartScheduleObj?.startTime || '07:00');
+                                    const slotEndTime = isSplitSegment
+                                      ? (segmentEndScheduleObj?.endTime || schedule.jamSelesai || '08:20')
+                                      : (schedule.jamSelesai || segmentEndScheduleObj?.endTime || '08:20');
                                     const timeMarker = calculateSlotTimeMarker(slotStartTime, slotEndTime, slot.attendance?.waktuAbsen);
+                                    const showOutdoorRoom = Boolean(
+                                      slot.activeRoom && !isRegularClassroomLocation(slot.activeRoom, slot.defaultRoom)
+                                    );
 
                                     cells.push(
                                       <td
@@ -824,7 +894,7 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                                       >
                                         <div
                                           onClick={() => onSelectSlot(slot)}
-                                          title={`${slot.subject?.namaMapel || schedule.kodeMapel}\nGuru: ${slot.teacher?.namaLengkap || schedule.kodeGuru}\nRuang: ${slot.activeRoom}\nStatus: ${slot.statusLabel}${timeMarker ? `\nWaktu Absen: ${timeMarker.formattedDisplay} (Jadwal: ${timeMarker.startTime} - ${timeMarker.endTime})` : ''}`}
+                                          title={`${slot.subject?.namaMapel || schedule.kodeMapel}\nGuru: ${slot.teacher?.namaLengkap || schedule.kodeGuru}${showOutdoorRoom ? `\nRuang: ${slot.activeRoom}` : ''}\nJam Segmen: ${slotStartTime} - ${slotEndTime}\nStatus: ${slot.statusLabel}${timeMarker ? `\nWaktu Absen: ${timeMarker.formattedDisplay} (Segmen: ${timeMarker.startTime} - ${timeMarker.endTime})` : ''}`}
                                           className={`rounded cursor-pointer transition-all border text-left flex ${
                                             isUltraCompact 
                                               ? 'px-1 py-0.5 min-h-[30px] leading-tight flex-col justify-between' 
@@ -833,21 +903,23 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                                         >
                                           {isUltraCompact ? (
                                             <div className="w-full flex flex-col justify-between h-full">
-                                              {/* Baris 1: Kode Guru & Kode Mapel (KIRI, tidak boleh terhalangi) + Ruang & Status Dot (KANAN) */}
+                                              {/* Baris 1: Kode Guru & Kode Mapel (KIRI, tidak boleh terhalangi) + Ruang Luar Kelas & Status Dot (KANAN) */}
                                               <div className="flex items-center justify-between gap-1 w-full">
                                                 <div className="flex items-center gap-1 shrink-0">
                                                   <span className="font-mono font-black text-[9.5px] bg-black/10 px-1 py-0.2 rounded shrink-0 text-slate-900 shadow-2xs">
                                                     {schedule.kodeGuru}
                                                   </span>
-                                                  <span className="font-semibold text-[10px] font-mono truncate max-w-[34px] sm:max-w-[44px]" title={slot.subject?.namaMapel || schedule.kodeMapel}>
+                                                  <span className="font-semibold text-[10px] font-mono truncate max-w-[38px] sm:max-w-[50px]" title={slot.subject?.namaMapel || schedule.kodeMapel}>
                                                     {schedule.kodeMapel}
                                                   </span>
                                                 </div>
 
                                                 <div className="flex items-center gap-1 shrink-0 ml-auto">
-                                                  <span className="text-[8.5px] font-mono opacity-80 truncate max-w-[32px] sm:max-w-[42px]" title={slot.activeRoom}>
-                                                    {slot.activeRoom}
-                                                  </span>
+                                                  {showOutdoorRoom && (
+                                                    <span className="text-[8.5px] font-mono font-semibold text-sky-900 bg-sky-100/80 px-1 rounded truncate max-w-[36px] sm:max-w-[46px]" title={slot.activeRoom}>
+                                                      {slot.activeRoom}
+                                                    </span>
+                                                  )}
                                                   {slot.statusColor === 'green' && (
                                                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0 shadow-2xs" title="Hadir (Kelas)"></span>
                                                   )}
@@ -934,7 +1006,7 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
                                                       {span} JP ({slotStartTime} - {slotEndTime})
                                                     </span>
                                                   ) : (
-                                                    <span className="font-mono text-slate-400">Jam {schedule.jamKe} ({slotStartTime} - {slotEndTime})</span>
+                                                    <span className="font-mono text-slate-400">Jam {period} ({slotStartTime} - {slotEndTime})</span>
                                                   )}
                                                 </div>
                                                 <div className="font-bold text-xs truncate" title={slot.subject?.namaMapel || schedule.kodeMapel}>
@@ -1005,8 +1077,8 @@ export const ClassroomMatrix: React.FC<ClassroomMatrixProps> = ({
 
                                               {/* Status Keterangan Kehadiran */}
                                               <div className="flex items-center justify-between text-[10px] mt-1 pt-1 border-t border-slate-200/60">
-                                                <span className="truncate text-slate-500 font-medium">
-                                                  {slot.activeRoom}
+                                                <span className="truncate text-sky-800 font-semibold">
+                                                  {showOutdoorRoom ? slot.activeRoom : ''}
                                                 </span>
                                                 <span className={`px-1.5 py-0.2 rounded font-bold font-mono text-[9px] ${
                                                   slot.statusColor === 'green' ? 'bg-emerald-100 text-emerald-800' :

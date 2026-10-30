@@ -594,6 +594,32 @@ export function processTapakBundle(rawBundle: any): TapakDatabaseBundle {
 }
 
 /**
+ * Mengecek apakah nama ruangan merupakan ruang kelas reguler (seperti "Ruang Kelas", "Ruang VII A", "Kelas VII", "R. 101", dll.)
+ * Bernilai false jika ruangan berada di luar kelas / ruang khusus (seperti "Lapangan", "Lab IPA", "Perpustakaan", dll.)
+ */
+export function isRegularClassroomLocation(roomName?: string | null, defaultRoom?: string | null): boolean {
+  if (!roomName || roomName.trim() === '' || roomName.trim() === '-') return true;
+  const clean = roomName.trim().toLowerCase();
+  if (
+    clean === 'ruang kelas' ||
+    clean === 'kelas' ||
+    clean === 'di dalam kelas' ||
+    clean === 'dalam kelas' ||
+    clean === 'ruang belajar'
+  ) {
+    return true;
+  }
+  if (defaultRoom && clean === defaultRoom.trim().toLowerCase()) {
+    return true;
+  }
+  // Pola ruang kelas standar: "R. 101", "R. VII A", "Ruang Kelas VII A", "Ruang VII", "Ruang VII-A", "Kelas VIII B", dll.
+  if (/^(r\.?\s*|ruang\s+kelas\s*|ruang\s+|kelas\s+)(vii|viii|ix|7|8|9|\d{1,3})\b/i.test(clean)) {
+    return true;
+  }
+  return false;
+}
+
+/**
  * Menghubungkan Schedule dengan Kamus & Attendance Log untuk 1 Slot Jadwal
  */
 export function resolveScheduleSlot(
@@ -667,14 +693,7 @@ export function resolveScheduleSlot(
       statusColor = 'yellow';
       statusLabel = `Guru Tidak Hadir (${matchingLog.statusKehadiran})`;
     } else if (matchingLog.statusKehadiran === 'Hadir') {
-      const isRegularClassroom = (() => {
-        if (!matchingLog.ruangBelajar || matchingLog.ruangBelajar.trim() === '') return true;
-        const clean = matchingLog.ruangBelajar.trim().toLowerCase();
-        if (clean === 'ruang kelas' || clean === 'kelas' || clean === 'di dalam kelas' || clean === 'dalam kelas') return true;
-        if (defaultRoom && clean === defaultRoom.trim().toLowerCase()) return true;
-        if (/^(r\.|ruang\s+kelas|kelas)\s+[a-z0-9\-]+$/i.test(clean)) return true;
-        return false;
-      })();
+      const isRegularClassroom = isRegularClassroomLocation(matchingLog.ruangBelajar, defaultRoom);
 
       if (isRegularClassroom) {
         statusColor = 'green';
@@ -684,14 +703,7 @@ export function resolveScheduleSlot(
         statusLabel = `Hadir di Luar Kelas (${activeRoom}) - Absen: ${matchingLog.waktuAbsen || '-'} WIB`;
       }
     } else {
-      const isRegularClassroom = (() => {
-        if (!matchingLog.ruangBelajar || matchingLog.ruangBelajar.trim() === '') return true;
-        const clean = matchingLog.ruangBelajar.trim().toLowerCase();
-        if (clean === 'ruang kelas' || clean === 'kelas' || clean === 'di dalam kelas' || clean === 'dalam kelas') return true;
-        if (defaultRoom && clean === defaultRoom.trim().toLowerCase()) return true;
-        if (/^(r\.|ruang\s+kelas|kelas)\s+[a-z0-9\-]+$/i.test(clean)) return true;
-        return false;
-      })();
+      const isRegularClassroom = isRegularClassroomLocation(matchingLog.ruangBelajar, defaultRoom);
 
       statusColor = isRegularClassroom ? 'green' : 'blue';
       statusLabel = matchingLog.statusKehadiran;

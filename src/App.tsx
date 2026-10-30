@@ -56,6 +56,7 @@ import { AdminUrlModal } from './components/AdminUrlModal';
 import { InitialSetupModal } from './components/InitialSetupModal';
 import { AttendanceToastContainer, AttendanceAlertToast } from './components/AttendanceToastContainer';
 import { AdminPiketAgendaWorkspace } from './components/AdminPiketAgendaWorkspace';
+import { InitialSyncModal } from './components/InitialSyncModal';
 import { 
   Calendar, 
   Info,
@@ -214,6 +215,11 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isLiveConnected, setIsLiveConnected] = useState<boolean>(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
+  // Modal Loading Sinkronisasi Awal Backend
+  const [isInitialBootLoading, setIsInitialBootLoading] = useState<boolean>(true);
+  const [initialSyncSuccess, setInitialSyncSuccess] = useState<boolean>(false);
+  const [initialSyncError, setInitialSyncError] = useState<string | null>(null);
 
   // Sistem Alert Visual (Toast) & Indikator Perubahan Real-time Presensi
   const [activeToasts, setActiveToasts] = useState<AttendanceAlertToast[]>([]);
@@ -390,6 +396,8 @@ export default function App() {
         }
 
         setIsLiveConnected(true);
+        setInitialSyncSuccess(true);
+        setInitialSyncError(null);
         const loginCount = bundle.masterLogin?.length || 0;
         const holidayCount = bundle.hariLibur?.length || 0;
         setSyncMessage(`Sinkronisasi Sheet Sukses: ${bundle.classes.length} Kelas, ${bundle.schedules.length} Jadwal, ${bundle.attendanceLogs.length} Log Presensi, ${holidayCount} Hari Libur, ${loginCount} Akun Admin.`);
@@ -398,6 +406,8 @@ export default function App() {
       }
     } catch (err: any) {
       setIsLiveConnected(false);
+      setInitialSyncSuccess(false);
+      setInitialSyncError(err.message || 'Gagal terhubung ke Google Sheets');
       setSyncMessage(`Koneksi: Menggunakan data lokal TAPAK (${err.message})`);
     } finally {
       setIsSyncing(false);
@@ -449,6 +459,9 @@ export default function App() {
       if (isMounted && appsScriptUrl) {
         setIsInitialSetupOpen(false);
         fetchFromAppsScript(appsScriptUrl);
+      } else if (isMounted) {
+        // Jika belum ada URL terkonfigurasi, langsung tutup loading modal agar user dapat mengatur link
+        setIsInitialBootLoading(false);
       }
     };
 
@@ -505,32 +518,13 @@ export default function App() {
         }
       });
 
-      // 2. Beri visual alert toast presensi masuk/diperbarui
-      const teacher = masterGuru.find(g => g.kodeGuru.toLowerCase() === (newLog.kodeGuru || '').toLowerCase());
-      const subject = masterMapel.find(m => m.kodeMapel.toLowerCase() === (newLog.mataPelajaran || '').toLowerCase());
-      setActiveToasts(prev => [
-        {
-          id: `piket_${Date.now()}`,
-          className: newLog.kelas,
-          teacherName: teacher?.namaLengkap || newLog.namaGuru || `Guru [${newLog.kodeGuru}]`,
-          teacherCode: newLog.kodeGuru,
-          subjectName: subject?.namaMapel || newLog.mataPelajaran,
-          waktuAbsen: newLog.statusKehadiran === 'Hadir' ? 'Agenda Siswa (Hadir)' : `Agenda (${newLog.statusKehadiran})`,
-          statusKehadiran: newLog.statusKehadiran,
-          pengganti: newLog.pengganti,
-          namaPengganti: `Sumber: ${newLog.sumberData || 'Agenda Kelas'}${newLog.penginputData ? ` · Oleh: ${newLog.penginputData}` : ''}`,
-          timestamp: Date.now(),
-        },
-        ...prev.slice(0, 4)
-      ]);
-
-      // 3. Highlight kelas di matriks dashboard
+      // 2. Highlight kelas di matriks dashboard (tanpa memunculkan popup toast besar agar visual tetap tenang)
       if (newLog.kelas) {
         setRecentlyUpdatedClasses(prev => [newLog.kelas, ...prev.filter(c => c !== newLog.kelas)]);
         setTimeout(() => setRecentlyUpdatedClasses([]), 6000);
       }
 
-      // 4. Sinkronisasi ke Google Apps Script Spreadsheet jika URL terkonfigurasi
+      // 3. Sinkronisasi di latar belakang ke Google Apps Script Spreadsheet jika URL terkonfigurasi
       if (appsScriptUrl && appsScriptUrl.trim()) {
         const sheetPayload = formatLogForSheetPayload(newLog);
         try {
@@ -547,19 +541,19 @@ export default function App() {
           });
           return {
             success: true,
-            message: `Berhasil disimpan ke Agenda Piket & dikirim ke Google Sheets (ID: ${newLog.idKiriman}).`,
+            message: `Terkirim ke Google Sheets (ID: ${newLog.idKiriman}).`,
           };
         } catch (err: any) {
           return {
-            success: true,
-            message: `Tersimpan di sistem lokal TAPAK (Koneksi Sheets: ${err.message || 'offline'}).`,
+            success: false,
+            message: `Kendala jaringan ke Google Sheets (${err.message || 'offline'}). Tersimpan lokal.`,
           };
         }
       }
 
       return {
         success: true,
-        message: `Berhasil dicatat di sistem lokal TAPAK (ID: ${newLog.idKiriman}).`,
+        message: `Tersimpan di sistem lokal TAPAK (ID: ${newLog.idKiriman}).`,
       };
     } catch (err: any) {
       return {
@@ -567,7 +561,7 @@ export default function App() {
         message: `Gagal menyimpan log: ${err.message || 'Terjadi kesalahan sistem'}`,
       };
     }
-  }, [appsScriptUrl, masterGuru, masterMapel]);
+  }, [appsScriptUrl]);
 
   // Hitung KPI Berdasarkan Schedules & AttendanceLogs Hari Ini
   const stats = useMemo(() => {
@@ -915,6 +909,19 @@ export default function App() {
           />
         )}
       </main>
+
+      {/* 4. Modal Loading Sinkronisasi Data Awal Backend */}
+      <InitialSyncModal
+        isOpen={isInitialBootLoading}
+        onDismiss={() => setIsInitialBootLoading(false)}
+        isSyncing={isSyncing}
+        isSuccess={initialSyncSuccess}
+        errorMessage={initialSyncError}
+        classesCount={classes.length}
+        schedulesCount={schedules.length}
+        logsCount={attendanceLogs.length}
+        teachersCount={masterGuru.length}
+      />
 
       {/* 5. Pop-up Awal Pengisian Link Backend ketika belum terekam */}
       <InitialSetupModal
