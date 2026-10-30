@@ -310,15 +310,8 @@ export const AdminPiketAgendaWorkspace: React.FC<AdminPiketAgendaWorkspaceProps>
           return false;
         });
 
-        const sData = (matched?.sumberData || 'Agenda Kelas').trim();
-        let initSumber = 'Agenda Kelas';
-        let initCustom = '';
-        if (sData === 'Agenda Kelas' || sData === 'Guru Piket' || sData === 'Siswa') {
-          initSumber = sData;
-        } else if (sData) {
-          initSumber = 'Lainnya';
-          initCustom = sData;
-        }
+        // Jika sesi KBM sudah tercatat di attendanceLogs (baik Hadir, Sakit, Izin, dll), jangan tampilkan di input masal
+        if (matched) return;
 
         rows.push({
           id: `${td.dateStr}_${sched.namaKelas}_${sched.mapelKe}_${sched.kodeGuru}_${dIdx}_${sIdx}`,
@@ -326,12 +319,12 @@ export const AdminPiketAgendaWorkspace: React.FC<AdminPiketAgendaWorkspaceProps>
           schedule: sched,
           dateStr: td.dateStr,
           dayName: td.dayName,
-          status: matched?.statusKehadiran || 'Hadir',
-          kegiatan: matched?.kegiatanPembelajaran && matched.kegiatanPembelajaran !== '-' ? matched.kegiatanPembelajaran : '',
-          info: matched?.infoKetidakhadiran && matched.infoKetidakhadiran !== '-' ? matched.infoKetidakhadiran : '',
-          sumberData: initSumber,
-          sumberDataCustom: initCustom,
-          existingLog: matched || null,
+          status: 'Hadir',
+          kegiatan: '',
+          info: '',
+          sumberData: 'Agenda Kelas',
+          sumberDataCustom: '',
+          existingLog: null,
         });
       });
     });
