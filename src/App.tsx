@@ -910,6 +910,11 @@ export default function App() {
         )}
       </main>
 
+      {/* Footer Aplikasi */}
+      <footer className="mt-8 mb-4 text-center text-xs text-slate-500 font-medium border-t border-slate-200/60 pt-4 px-4">
+        Aplikasi ini dibuat oleh Dzulfikri A, S.Pd
+      </footer>
+
       {/* 4. Modal Loading Sinkronisasi Data Awal Backend */}
       <InitialSyncModal
         isOpen={isInitialBootLoading}

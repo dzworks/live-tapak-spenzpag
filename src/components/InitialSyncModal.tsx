@@ -224,8 +224,8 @@ export const InitialSyncModal: React.FC<InitialSyncModalProps> = ({
         </div>
 
         {/* Footer info halus */}
-        <div className="px-6 py-2.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
-          <span>Sistem TAPAK Live Monitoring</span>
+        <div className="px-6 py-2.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500 font-medium">
+          <span>Developed by Dzulfikri A, S.Pd</span>
           <span className="font-mono">WIB (UTC+7)</span>
         </div>
       </div>

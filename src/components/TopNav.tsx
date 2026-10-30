@@ -59,7 +59,7 @@ export const TopNav: React.FC<TopNavProps> = ({
                 TAPAK Live Monitor
               </span>
               <span className="text-[10px] text-emerald-400 font-medium block font-mono">
-                Versi 3.5.2
+                Versi 4.0.0 (Pro Piket)
               </span>
             </div>
           </div>
